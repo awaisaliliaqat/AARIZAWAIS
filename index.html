@@ -191,7 +191,7 @@
     <div class="controls">
       <b>WASD</b><span>Move</span><b>MOUSE</b><span>Look / aim</span>
       <b>L-CLICK</b><span>Shoot (hold for auto)</span><b>SPACE</b><span>Jump</span>
-      <b>SHIFT</b><span>Sprint</span><b>1-7 / scroll</b><span>Switch weapon</span>
+      <b>SHIFT</b><span>Sprint</span><b>1-9 / scroll</b><span>Switch weapon</span>
       <b>R</b><span>Reload</span><b>G</b><span>Throw grenade</span><b>V</b><span>Melee knife</span>
     </div>
   </details>
@@ -429,7 +429,7 @@ const lookDelta={x:0,y:0};
 const moveStick={x:0,y:0};
 
 addEventListener('keydown',e=>{ keys[e.code]=true;
-  const dm=e.code.match(/^Digit([1-7])$/); if(dm) selectWeapon(+dm[1]-1);
+  const dm=e.code.match(/^Digit([1-9])$/); if(dm){ const s=+dm[1]-1; if(s<loadout.length) selectWeapon(loadout[s]); }
   if(e.code==='KeyR')reload(); if(e.code==='KeyG')throwGrenade(); if(e.code==='KeyV')melee(); });
 addEventListener('keyup',e=> keys[e.code]=false);
 addEventListener('mousedown',e=>{ if(e.button===0) startFire(); });
@@ -447,12 +447,17 @@ function releaseFire(){ firing=false; }
 // ---------- Weapons ----------
 const weapons=[
  {id:'smg',name:'SMG',cost:0,blurb:'Full-auto all-rounder',type:'hitscan',dmg:14,rpm:660,auto:true,mag:30,reload:1.4,spread:0.022,pellets:1,range:120,recoil:.012,color:0x4dd2ff,knock:2},
- {id:'shotgun',name:'SHOTGUN',cost:2,blurb:'Close-range pellet burst',type:'hitscan',dmg:11,rpm:80,auto:false,mag:6,reload:1.9,spread:0.10,pellets:9,range:38,recoil:.05,color:0xff9f1c,knock:6},
- {id:'revolver',name:'REVOLVER',cost:3,blurb:'Hard-hitting semi-auto',type:'hitscan',dmg:50,rpm:170,auto:false,mag:6,reload:1.5,spread:0.005,pellets:1,range:150,recoil:.04,color:0xffd23f,knock:6},
- {id:'sniper',name:'SNIPER',cost:4,blurb:'Near one-shot · 1.6× headshot',type:'hitscan',dmg:95,rpm:48,auto:false,mag:5,reload:2.1,spread:0,pellets:1,range:320,recoil:.06,color:0x6dff8c,knock:9},
- {id:'rocket',name:'ROCKET',cost:6,blurb:'Splash + knockback · rocket-jump',type:'rocket',dmg:72,rpm:55,auto:false,mag:3,reload:2.5,range:200,recoil:.07,color:0xff2e63,speed:48,radius:7,splash:58,knock:22},
- {id:'minigun',name:'MINIGUN',cost:8,blurb:'Bullet hose · huge mag',type:'hitscan',dmg:9,rpm:1150,auto:true,mag:120,reload:3.4,spread:0.05,pellets:1,range:100,recoil:.006,color:0xff7eb6,knock:1},
- {id:'railgun',name:'RAILGUN',cost:11,blurb:'Instant one-shot beam',type:'hitscan',dmg:140,rpm:38,auto:false,mag:4,reload:2.7,spread:0,pellets:1,range:400,recoil:.07,color:0x00e5ff,knock:14},
+ {id:'shotgun',name:'SHOTGUN',cost:2,blurb:'Close-range pellet burst',type:'hitscan',dmg:13,rpm:80,auto:false,mag:6,reload:1.9,spread:0.10,pellets:9,range:40,recoil:.05,color:0xff9f1c,knock:6},
+ {id:'revolver',name:'REVOLVER',cost:3,blurb:'Hard-hitting semi-auto',type:'hitscan',dmg:55,rpm:170,auto:false,mag:6,reload:1.5,spread:0.005,pellets:1,range:150,recoil:.04,color:0xffd23f,knock:6},
+ {id:'rifle',name:'ASSAULT RIFLE',cost:4,blurb:'Controllable full-auto punch',type:'hitscan',dmg:24,rpm:480,auto:true,mag:25,reload:1.7,spread:0.016,pellets:1,range:140,recoil:.02,color:0x7cfc00,knock:3},
+ {id:'sniper',name:'SNIPER',cost:5,blurb:'One-shot headshots',type:'hitscan',dmg:110,rpm:48,auto:false,mag:5,reload:2.1,spread:0,pellets:1,range:340,recoil:.06,color:0x6dff8c,knock:9},
+ {id:'deagle',name:'HAND CANNON',cost:6,blurb:'Massive semi-auto pistol',type:'hitscan',dmg:90,rpm:120,auto:false,mag:7,reload:1.6,spread:0.004,pellets:1,range:170,recoil:.05,color:0xffcc33,knock:8},
+ {id:'rocket',name:'ROCKET',cost:7,blurb:'Splash + knockback · rocket-jump',type:'rocket',dmg:85,rpm:55,auto:false,mag:3,reload:2.5,range:200,recoil:.07,color:0xff2e63,speed:48,radius:7,splash:62,knock:22},
+ {id:'crossbow',name:'CROSSBOW',cost:8,blurb:'Silent one-shot bolt',type:'hitscan',dmg:140,rpm:55,auto:false,mag:4,reload:1.9,spread:0,pellets:1,range:300,recoil:.05,color:0x9b6dff,knock:7},
+ {id:'plasma',name:'PLASMA RIFLE',cost:10,blurb:'Rapid energy bolts',type:'hitscan',dmg:34,rpm:540,auto:true,mag:40,reload:2.0,spread:0.01,pellets:1,range:160,recoil:.014,color:0x00ffd5,knock:3},
+ {id:'minigun',name:'MINIGUN',cost:11,blurb:'Bullet hose · huge mag',type:'hitscan',dmg:16,rpm:1150,auto:true,mag:150,reload:3.4,spread:0.045,pellets:1,range:110,recoil:.006,color:0xff7eb6,knock:1},
+ {id:'railgun',name:'RAILGUN',cost:13,blurb:'Instant one-shot beam',type:'hitscan',dmg:185,rpm:38,auto:false,mag:4,reload:2.7,spread:0,pellets:1,range:420,recoil:.07,color:0x00e5ff,knock:14},
+ {id:'bfg',name:'PLASMA CANNON',cost:18,blurb:'Devastating splash — the ultimate',type:'rocket',dmg:170,rpm:40,auto:false,mag:2,reload:3.2,range:200,recoil:.09,color:0x39ff14,speed:42,radius:10,splash:130,knock:30},
 ];
 let curWeapon=0; const ammo=weapons.map(w=>w.mag);
 let reloading=false, reloadEnd=0, lastShot=0, recoilV=0;
@@ -480,8 +485,10 @@ function addXP(n){ profile.xp+=n; xpGainedThisGame+=n;
     const k=1+(profile.level%5===0?2:0); profile.keys+=k; keysEarnedThisGame+=k;
     pushFeed('⭐ LEVEL '+profile.level+'  ·  +'+k+' 🔑'); sfx('level'); }
   saveProfile(); updateLevelHUD(); }
-function cycleWeapon(dir){ let i=curWeapon;
-  for(let k=0;k<weapons.length;k++){ i=(i+dir+weapons.length)%weapons.length; if(isUnlocked(i)){ selectWeapon(i); return; } } }
+let loadout=[];   // indices of owned weapons, in weapon order
+function rebuildLoadout(){ loadout=weapons.map((w,i)=>i).filter(isUnlocked); }
+function cycleWeapon(dir){ if(!loadout.length)return; let pos=loadout.indexOf(curWeapon);
+  pos=(pos+dir+loadout.length)%loadout.length; selectWeapon(loadout[pos]); }
 
 function selectWeapon(i){ if(i<0||i>=weapons.length||i===curWeapon||gameState!=='playing')return;
   if(!isUnlocked(i)){ sfx('denied'); return; }
@@ -499,12 +506,12 @@ function buildViewModel(){
   const acc=new THREE.MeshLambertMaterial({color:w.color,emissive:w.color,emissiveIntensity:.4});
   const mk=(sx,sy,sz,x,y,z,m)=>{const e=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),m);e.position.set(x,y,z);g.add(e);return e;};
   mk(0.14,0.16,0.5,0,-0.02,-0.2,body); mk(0.1,0.22,0.12,0,-0.18,0.02,body);
-  const id=w.id, longGun=(id==='sniper'||id==='railgun');
-  const bl= longGun?0.7 : id==='rocket'?0.5 : id==='shotgun'?0.34 : id==='minigun'?0.5 : 0.42;
-  mk(id==='rocket'?0.16:0.07, id==='rocket'?0.16:0.07, bl, 0,0.01,-0.3-bl/2, body);
+  const id=w.id, longGun=(id==='sniper'||id==='railgun'||id==='crossbow'), rocketish=(id==='rocket'||id==='bfg');
+  const bl= longGun?0.7 : rocketish?0.5 : id==='shotgun'?0.34 : id==='minigun'?0.5 : 0.42;
+  mk(rocketish?0.18:0.07, rocketish?0.18:0.07, bl, 0,0.01,-0.3-bl/2, body);
   mk(0.16,0.05,0.3,0,0.08,-0.18,acc);
   if(longGun){ const s=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.26,12),body);s.rotation.x=Math.PI/2;s.position.set(0,.12,-.18);g.add(s); }
-  if(id==='rocket'){ mk(0.2,0.2,0.2,0,0.02,-0.78,acc); }
+  if(rocketish){ mk(0.22,0.22,0.2,0,0.02,-0.78,acc); }
   if(id==='minigun'){ mk(0.16,0.16,0.42,0,0.01,-0.55,body); }
   muzzle=new THREE.Object3D(); muzzle.position.set(0,0.01,-0.32-bl); g.add(muzzle);
   muzzleFlash=new THREE.Mesh(new THREE.PlaneGeometry(0.45,0.45),
@@ -556,7 +563,7 @@ function makeEnemy(){
   const top=supportTopAt(pick[0],pick[1],0.5,1e9);
   g.position.set(pick[0], top<=-1e8?0:top, pick[1]);
   mapGroup.add(g); shootTargets.push(g);
-  const e={group:g,hp:100,speed:rnd(2.4,3.4),nextShot:clock.elapsedTime+rnd(1.4,2.6),
+  const e={group:g,hp:160,maxhp:160,speed:rnd(2.4,3.4),nextShot:clock.elapsedTime+rnd(1.4,2.6),
     color:col,legs:[ll,rl],walkT:Math.random()*6,vel:new THREE.Vector3(),airT:0,grounded:true,
     strafe:Math.random()<.5?1:-1,strafeT:0};
   enemies.push(e); return e;
@@ -648,11 +655,11 @@ function hasLOS(a,b){ losDir.copy(b).sub(a); const d=losDir.length(); losDir.nor
 
 // ---------- Projectiles (rocket + grenade) ----------
 const projectiles=[];
-function spawnRocket(origin,dir){
-  const m=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,0.6,8),new THREE.MeshBasicMaterial({color:0xffd23f}));
+function spawnRocket(origin,dir,w){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,0.6,8),new THREE.MeshBasicMaterial({color:w.color}));
   m.position.copy(origin); m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
   mapGroup.add(m);
-  projectiles.push({mesh:m,vel:dir.clone().multiplyScalar(weapons[3].speed),type:'rocket',life:4,prev:origin.clone()});
+  projectiles.push({mesh:m,vel:dir.clone().multiplyScalar(w.speed),type:'rocket',life:4,prev:origin.clone(),w});
 }
 function throwGrenade(){
   if(gameState!=='playing'||grenades<=0||clock.elapsedTime-lastGrenade<0.6)return;
@@ -671,7 +678,7 @@ function updateProjectiles(dt){
       const top=supportTopAt(pr.mesh.position.x,pr.mesh.position.z,0.2,pr.mesh.position.y+0.5);
       if(top>-1e8&&pr.mesh.position.y<top+0.2){ pr.mesh.position.y=top+0.2; pr.vel.y*=-0.4; pr.vel.x*=0.6; pr.vel.z*=0.6; }
       pr.fuse-=dt;
-      if(pr.fuse<=0 || (killY!=null&&pr.mesh.position.y<killY)){ explode(pr.mesh.position,weapons[3].radius*0.9,38,16,true); mapGroup.remove(pr.mesh); projectiles.splice(i,1); }
+      if(pr.fuse<=0 || (killY!=null&&pr.mesh.position.y<killY)){ explode(pr.mesh.position,6,42,16,true); mapGroup.remove(pr.mesh); projectiles.splice(i,1); }
       continue;
     }
     // rocket
@@ -682,8 +689,8 @@ function updateProjectiles(dt){
       const hits=r.intersectObjects(shootTargets,true); if(hits.length){ hitPt=hits[0].point; hitObj=hits[0].object; } }
     if(hitPt || pr.life<=0 || (killY!=null&&pr.mesh.position.y<killY)){
       if(hitObj){ let o=hitObj,e=null; while(o){ if(o.userData.enemy){ e=enemies.find(x=>x.group===o); break; } o=o.parent; }
-        if(e){ e.hp-=weapons[3].dmg; if(e.hp<=0) killEnemy(e,false,false); } }   // direct-impact bonus
-      explode(hitPt||pr.mesh.position, weapons[3].radius, weapons[3].splash, weapons[3].knock, true);
+        if(e){ e.hp-=pr.w.dmg; if(e.hp<=0) killEnemy(e,false,false); } }   // direct-impact bonus
+      explode(hitPt||pr.mesh.position, pr.w.radius, pr.w.splash, pr.w.knock, true);
       mapGroup.remove(pr.mesh); projectiles.splice(i,1);
     }
   }
@@ -764,9 +771,9 @@ function tryFire(){
   const origin=new THREE.Vector3(); camera.getWorldPosition(origin);
   const mz=new THREE.Vector3(); if(muzzle)muzzle.getWorldPosition(mz);
 
-  if(w.type==='rocket'){ sfx('shot'); const d=new THREE.Vector3(); camera.getWorldDirection(d); spawnRocket(mz,d); return; }
+  if(w.type==='rocket'){ sfx('shot'); const d=new THREE.Vector3(); camera.getWorldDirection(d); spawnRocket(mz,d,w); return; }
 
-  sfx((w.id==='sniper'||w.id==='railgun')?'snipe':'shot');
+  sfx((w.id==='sniper'||w.id==='railgun'||w.id==='crossbow')?'snipe':'shot');
   let hitAny=false;
   for(let p=0;p<w.pellets;p++){
     camera.getWorldDirection(fwd);
@@ -776,7 +783,7 @@ function tryFire(){
     let end=origin.clone().addScaledVector(fwd,w.range);
     if(hits.length){ const h=hits[0]; end=h.point.clone();
       let o=h.object,e=null; while(o){ if(o.userData.enemy){ e=enemies.find(en=>en.group===o); break; } o=o.parent; }
-      if(e){ const head=h.point.y>e.group.position.y+1.95; const dmg=w.dmg*(head?1.6:1);
+      if(e){ const head=h.point.y>e.group.position.y+1.95; const dmg=w.dmg*(head?2.5:1);
         e.hp-=dmg; const kdir=fwd.clone().setY(0).normalize(); knockEnemy(e,kdir,w.knock,w.knock*0.3);
         burst(h.point,e.color,head?10:6); sfx('hit'); hitAny=true;
         if(e.hp<=0) killEnemy(e,head,false);
@@ -791,10 +798,9 @@ function flashMuzzle(){ if(!muzzleFlash)return; muzzleFlash.material.opacity=1; 
 // ---------- UI ----------
 const $=s=>document.querySelector(s);
 function renderWeaponSlots(){ const el=$('#weapons'); if(!el)return; el.innerHTML='';
-  weapons.forEach((w,i)=>{ const owned=isUnlocked(i); const d=document.createElement('div');
-    d.className='wslot'+(i===curWeapon?' active':'')+(owned?'':' locked');
-    d.innerHTML='<div class="num">'+(owned?'['+(i+1)+']':'🔒')+'</div><div class="nm">'+w.name+'</div>'
-      +(owned?'':'<div class="lk">'+w.cost+' 🔑</div>');
+  loadout.forEach((wi,slot)=>{ const w=weapons[wi]; const d=document.createElement('div');
+    d.className='wslot'+(wi===curWeapon?' active':'');
+    d.innerHTML='<div class="num">['+(slot+1)+']</div><div class="nm">'+w.name+'</div>';
     el.appendChild(d); }); }
 function updateLevelHUD(){ const l=$('#levelhud'); if(l) l.innerHTML='LVL '+profile.level+'  ·  '+profile.keys+' 🔑';
   const x=$('#xphud'); if(x) x.style.width=Math.min(100,profile.xp/xpNeeded(profile.level)*100)+'%'; }
@@ -860,7 +866,8 @@ function updatePlayer(dt){
   if(killY!=null && player.pos.y<killY && player.alive){ player.alive=false; pushFeed('💀 YOU FELL INTO THE VOID'); gameOver(); return; }
 
   // regen
-  if(player.hp<player.maxhp && clock.elapsedTime-player.lastHit>2.5){ player.hp=Math.min(player.maxhp,player.hp+15*dt); updateHP(); }
+  if(player.hp<player.maxhp){ const rate=(clock.elapsedTime-player.lastHit>1.5)?28:6; // fast out of combat, trickle while hit
+    player.hp=Math.min(player.maxhp,player.hp+rate*dt); updateHP(); }
 
   // grenade regen
   if(grenades<grenadeMax && clock.elapsedTime-lastGrenade>7){ grenades++; lastGrenade=clock.elapsedTime; updateNadeUI(); }
@@ -887,7 +894,7 @@ function resetGame(){
   player.yaw=sp[3]||0; player.pitch=0; player.hp=100; player.alive=true; player.lastHit=0; player.standingOn=null;
   kills=0; score=0; grenades=grenadeMax; lastGrenade=-10;
   xpGainedThisGame=0; keysEarnedThisGame=0;
-  ammo.forEach((_,i)=>ammo[i]=weapons[i].mag); curWeapon=firstUnlockedIndex(); reloading=false; buildViewModel();
+  ammo.forEach((_,i)=>ammo[i]=weapons[i].mag); rebuildLoadout(); curWeapon=loadout[0]||0; reloading=false; buildViewModel();
   document.getElementById('kills').textContent='0';
   document.getElementById('mapname').textContent=MAPS[selectedMap].name+(killY!=null?' · RING-OUT':'');
   updateHP(); updateWeaponUI(); updateNadeUI(); updateLevelHUD(); startWave(1);
@@ -980,7 +987,7 @@ window.RIVALS={ get state(){return gameState;}, get enemies(){return enemies;}, 
     frame(d); renderer.render(scene,camera);
     return {state:gameState,enemies:enemies.length,toSpawn,kills,hp:Math.round(player.hp),py:+player.pos.y.toFixed(2),proj:projectiles.length}; } };
 
-buildViewModel(); updateWeaponUI(); updateNadeUI(); updateHP(); updateProgUI(); animate();
+rebuildLoadout(); buildViewModel(); updateWeaponUI(); updateNadeUI(); updateHP(); updateProgUI(); animate();
 </script>
 </body>
 </html>

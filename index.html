@@ -132,6 +132,20 @@
   #levelhud{font-size:13px;color:var(--warn);letter-spacing:1px;margin-top:5px;}
   #xpbar{width:130px;height:5px;background:rgba(255,255,255,.15);border-radius:4px;overflow:hidden;margin:3px auto 0;}
   #xphud{height:100%;width:0;background:var(--accent);transition:width .2s;}
+  /* in-game leave button + victory banner */
+  #leaveBtn{position:absolute;left:24px;top:14px;pointer-events:auto;cursor:pointer;display:none;
+    font-size:13px;font-weight:bold;letter-spacing:1px;padding:9px 18px;border:2px solid rgba(255,255,255,.28);
+    border-radius:22px;background:rgba(255,46,99,.28);color:#fff;text-transform:uppercase;backdrop-filter:blur(2px);}
+  #leaveBtn:hover{background:rgba(255,46,99,.6);transform:scale(1.04);}
+  #leaveBtn.on{display:block;}
+  #victory{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 40%,rgba(0,40,70,.5),rgba(5,8,14,.75));}
+  #victory.on{display:flex;animation:vfade .4s;}
+  @keyframes vfade{from{opacity:0}to{opacity:1}}
+  #victory .vtitle{font-size:84px;font-weight:900;letter-spacing:3px;
+    background:linear-gradient(90deg,#ffd23f,#fff,#00e5ff);-webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 60px rgba(255,210,63,.5);}
+  #victory .vsub{font-size:18px;letter-spacing:3px;opacity:.8;margin-top:6px;}
   /* multiplayer lobby + chat */
   .field{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:8px 0;width:320px;max-width:90vw;text-align:left;}
   .field label{font-size:11px;letter-spacing:2px;opacity:.7;text-transform:uppercase;}
@@ -192,6 +206,8 @@
   <div id="mpChat"></div>
   <input id="mpChatInput" maxlength="160" placeholder="Say something… (Enter to send, Esc to cancel)">
   <div id="scoreboard"><h4>Scoreboard</h4><div id="sbrows"></div></div>
+  <button id="leaveBtn">🏳 LEAVE</button>
+  <div id="victory"><div class="vtitle">🏆 YOU WIN!</div><div class="vsub"></div></div>
 </div>
 
 <!-- mobile controls -->
@@ -281,31 +297,61 @@
 
 <script type="module">
 import * as THREE from 'three';
+import { EffectComposer } from './jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from './jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from './jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from './jsm/postprocessing/OutputPass.js';
+import { RoomEnvironment } from './jsm/environments/RoomEnvironment.js';
 
 /* =======================================================================
-   BLOX RIVALS v2 — Roblox-Rivals-style arena FPS
-   Modes: wave survival + ring-out knockback. 4 maps, jump pads, movers,
-   rocket launcher, grenades, melee, mobile touch controls.
+   BLOX RIVALS v3 — Roblox-Rivals-style arena FPS
+   PBR materials, ACES tone mapping, environment reflections, bloom.
    ======================================================================= */
 
 // ---------- Core ----------
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(80, innerWidth/innerHeight, 0.05, 800);
 scene.add(camera);
 
-scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x404858, 1.05));
-const sun = new THREE.DirectionalLight(0xfff4e0, 1.1);
-sun.position.set(40,75,25); sun.castShadow = true;
+// environment map for PBR reflections (soft studio light)
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.55;
+
+scene.add(new THREE.HemisphereLight(0xdce9ff, 0x3a4250, 1.0));
+const sun = new THREE.DirectionalLight(0xfff2dc, 2.2);
+sun.position.set(45,80,30); sun.castShadow = true;
 sun.shadow.mapSize.set(2048,2048);
-const sc = sun.shadow.camera; sc.left=-90;sc.right=90;sc.top=90;sc.bottom=-90;sc.near=1;sc.far=260;
-sun.shadow.bias=-0.0004; scene.add(sun);
+const sc = sun.shadow.camera; sc.left=-90;sc.right=90;sc.top=90;sc.bottom=-90;sc.near=1;sc.far=280;
+sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.02; scene.add(sun);
+const rim = new THREE.DirectionalLight(0x88bbff, 0.6); rim.position.set(-40,30,-30); scene.add(rim);
+
+// ---------- Post-processing (bloom) ----------
+const IS_MOBILE_GPU = matchMedia('(pointer:coarse)').matches;
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),
+  IS_MOBILE_GPU?0.5:0.75, 0.55, 0.82);   // strength, radius, threshold
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+function renderFrame(){ composer.render(); }
+
+// gradient sky backdrops
+function gradTex(c1,c2){ const cv=document.createElement('canvas'); cv.width=8; cv.height=256;
+  const g=cv.getContext('2d'); const grd=g.createLinearGradient(0,0,0,256);
+  grd.addColorStop(0,c1); grd.addColorStop(1,c2); g.fillStyle=grd; g.fillRect(0,0,8,256);
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; return t; }
+const SKY_TEX=gradTex('#3f86c8','#d4ecff'), VOID_TEX=gradTex('#060b1c','#16305a');
 
 const GRAV = 24;
 function rnd(a,b){ return a+Math.random()*(b-a); }
@@ -320,7 +366,7 @@ let jumpPads=[], movers=[], medkits=[];
 let killY=null, hasFloor=true, currentMap=null;
 
 function addBox(w,h,d,x,y,z,color,opts={}){
-  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshLambertMaterial({color}));
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color,roughness:0.6,metalness:0.08,envMapIntensity:0.5}));
   m.position.set(x,y,z); m.castShadow=opts.cast!==false; m.receiveShadow=true; mapGroup.add(m);
   if(opts.collide!==false)
     staticColliders.push({min:new THREE.Vector3(x-w/2,y-h/2,z-d/2),max:new THREE.Vector3(x+w/2,y+h/2,z+d/2)});
@@ -339,7 +385,7 @@ function addPad(x,z,w,d,force){
   jumpPads.push({x,z,w,d,force,y:base});
 }
 function addMover(size,pos,color,axis,amp,speed,phase){
-  const mesh=new THREE.Mesh(new THREE.BoxGeometry(...size), new THREE.MeshLambertMaterial({color}));
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(...size), new THREE.MeshStandardMaterial({color}));
   const half=new THREE.Vector3(size[0]/2,size[1]/2,size[2]/2);
   // start at the phase-correct position so there is no first-frame teleport
   const off0=Math.sin(clock.elapsedTime*speed+phase)*amp;
@@ -419,14 +465,14 @@ function buildMap(def){
   killY=def.void; hasFloor=def.void==null; currentMap=def;
 
   if(hasFloor){
-    scene.background=new THREE.Color(0x8fc7ef); scene.fog=new THREE.Fog(0x8fc7ef,60,170);
-    const floor=new THREE.Mesh(new THREE.PlaneGeometry(120,120), new THREE.MeshLambertMaterial({color:0x3a4555}));
+    scene.background=SKY_TEX; scene.fog=new THREE.Fog(0xb9ddf5,65,175);
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(120,120), new THREE.MeshStandardMaterial({color:0x32404f,roughness:0.35,metalness:0.25,envMapIntensity:0.7}));
     floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; mapGroup.add(floor);
     obstacleMeshes.push(floor); shootTargets.push(floor);
     const grid=new THREE.GridHelper(120,48,0x00e5ff,0x2b3340);
     grid.material.opacity=.25; grid.material.transparent=true; grid.position.y=.02; mapGroup.add(grid);
   } else {
-    scene.background=new THREE.Color(0x0a1730); scene.fog=new THREE.Fog(0x0a1730,40,150);
+    scene.background=VOID_TEX; scene.fog=new THREE.Fog(0x0a1730,45,155);
     const voidPlane=new THREE.Mesh(new THREE.PlaneGeometry(300,300),
       new THREE.MeshBasicMaterial({color:0x05101f}));
     voidPlane.rotation.x=-Math.PI/2; voidPlane.position.y=def.void-6; mapGroup.add(voidPlane);
@@ -449,7 +495,7 @@ const MEDKIT_HEAL=40, MEDKIT_RESPAWN=10;
 function addMedkit(x,z){
   const top=supportTopAt(x,z,0.6,1e9); const y=(top<=-1e8?0:top)+1.0;
   const g=new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.7), new THREE.MeshLambertMaterial({color:0xffffff})));
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.7), new THREE.MeshStandardMaterial({color:0xffffff})));
   const red=new THREE.MeshBasicMaterial({color:0xff3344});
   for(const f of [0.36,-0.36]){ // crosses on front + back
     const ch=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.16,0.04),red); ch.position.z=f;
@@ -502,7 +548,8 @@ addEventListener('mousemove',e=>{ if(!locked)return;
   player.yaw-=e.movementX*sens; player.pitch-=e.movementY*sens;
   const lim=Math.PI/2-0.05; player.pitch=Math.max(-lim,Math.min(lim,player.pitch)); });
 document.addEventListener('pointerlockchange',()=> locked=(document.pointerLockElement===renderer.domElement));
-addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight); });
 
 function startFire(){ firing=true; if(gameState==='playing'&&!weapons[curWeapon].auto) tryFire(); }
 function releaseFire(){ firing=false; }
@@ -565,8 +612,8 @@ let viewModel=null,muzzle=null,muzzleFlash=null;
 function buildViewModel(){
   if(viewModel) camera.remove(viewModel);
   const w=weapons[curWeapon], g=new THREE.Group();
-  const body=new THREE.MeshLambertMaterial({color:0x20262f});
-  const acc=new THREE.MeshLambertMaterial({color:w.color,emissive:w.color,emissiveIntensity:.4});
+  const body=new THREE.MeshStandardMaterial({color:0x20262f});
+  const acc=new THREE.MeshStandardMaterial({color:w.color,emissive:w.color,emissiveIntensity:1.6,roughness:0.3,metalness:0.5});
   const mk=(sx,sy,sz,x,y,z,m)=>{const e=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),m);e.position.set(x,y,z);g.add(e);return e;};
   mk(0.14,0.16,0.5,0,-0.02,-0.2,body); mk(0.1,0.22,0.12,0,-0.18,0.02,body);
   const id=w.id, longGun=(id==='sniper'||id==='railgun'||id==='crossbow'), rocketish=(id==='rocket'||id==='bfg');
@@ -612,8 +659,8 @@ const enemies=[]; const teamCols=[0xff2e63,0xffa600,0xb06dff,0x00e5ff,0x39ff14];
 function makeEnemy(){
   const col=teamCols[(Math.random()*teamCols.length)|0];
   const g=new THREE.Group();
-  const skin=new THREE.MeshLambertMaterial({color:0xffce8a});
-  const cloth=new THREE.MeshLambertMaterial({color:col});
+  const skin=new THREE.MeshStandardMaterial({color:0xffce8a});
+  const cloth=new THREE.MeshStandardMaterial({color:col});
   const part=(w,h,d,x,y,z,m)=>{const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);e.position.set(x,y,z);e.castShadow=true;g.add(e);return e;};
   const ll=part(.36,.9,.36,-.22,.45,0,cloth), rl=part(.36,.9,.36,.22,.45,0,cloth);
   part(.9,1,.5,0,1.4,0,cloth); part(.3,.95,.3,-.62,1.45,0,skin); part(.3,.95,.3,.62,1.45,0,skin);
@@ -729,7 +776,7 @@ function throwGrenade(){
   grenades--; lastGrenade=clock.elapsedTime; updateNadeUI(); sfx('nade');
   const o=new THREE.Vector3(); camera.getWorldPosition(o);
   const d=new THREE.Vector3(); camera.getWorldDirection(d);
-  const m=new THREE.Mesh(new THREE.SphereGeometry(0.22,10,10),new THREE.MeshLambertMaterial({color:0x39ff14}));
+  const m=new THREE.Mesh(new THREE.SphereGeometry(0.22,10,10),new THREE.MeshStandardMaterial({color:0x39ff14}));
   m.position.copy(o); mapGroup.add(m);
   projectiles.push({mesh:m,vel:d.multiplyScalar(22).add(new THREE.Vector3(0,5,0)),type:'grenade',fuse:1.4,prev:o.clone()});
 }
@@ -967,12 +1014,12 @@ function resetGame(){
   document.getElementById('mapname').textContent=MAPS[selectedMap].name+(killY!=null?' · RING-OUT':'');
   updateHP(); updateWeaponUI(); updateNadeUI(); updateLevelHUD(); startWave(1);
 }
-function gameOver(){ gameState='over'; firing=false; document.exitPointerLock?.();
+function gameOver(){ gameState='over'; firing=false; showLeaveBtn(false); document.exitPointerLock?.();
   $('#fKills').textContent=kills; $('#fWave').textContent=wave;
   $('#fXP').textContent='+'+xpGainedThisGame; $('#fLevel').textContent=profile.level; $('#fKeys').textContent='+'+keysEarnedThisGame;
   saveProfile(); $('#overScreen').classList.remove('hidden'); }
 function beginGame(){ $('#startScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden'); $('#lobbyScreen').classList.add('hidden');
-  leaveMp(); gameMode='solo'; gameState='playing'; resetGame(); if(!IS_TOUCH) renderer.domElement.requestPointerLock(); }
+  leaveMp(); gameMode='solo'; gameState='playing'; resetGame(); showLeaveBtn(true); if(!IS_TOUCH) renderer.domElement.requestPointerLock(); }
 function openArmory(){ $('#overScreen').classList.add('hidden'); $('#startScreen').classList.remove('hidden'); gameState='menu'; updateProgUI(); }
 $('#startBtn').onclick=beginGame; $('#restartBtn').onclick=beginGame; $('#armoryBtn').onclick=openArmory;
 renderer.domElement.addEventListener('click',()=>{ if(gameState==='playing'&&!locked&&!IS_TOUCH) renderer.domElement.requestPointerLock(); });
@@ -1044,7 +1091,7 @@ function frame(dt){
     if(reloading&&clock.elapsedTime>=reloadEnd){ reloading=false; ammo[curWeapon]=weapons[curWeapon].mag; updateWeaponUI(); }
   } else updateEffects(dt);
 }
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(0.05,clock.getDelta()); frame(dt); renderer.render(scene,camera); }
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(0.05,clock.getDelta()); frame(dt); renderFrame(); }
 
 /* ================= MULTIPLAYER (lobby + chat + arena) =================
    Designed for a simple WebSocket ROOM-RELAY server: any JSON message a
@@ -1062,8 +1109,8 @@ const remotes={}, mpNames={}, mpScores={};
 const PLAYER_COLORS=[0x4dd2ff,0xff2e63,0xffd23f,0x6dff8c,0xb06dff,0xff9f1c,0x00e5ff,0xff7eb6];
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function avatarMesh(color){
-  const g=new THREE.Group(); const cloth=new THREE.MeshLambertMaterial({color});
-  const skin=new THREE.MeshLambertMaterial({color:0xffce8a});
+  const g=new THREE.Group(); const cloth=new THREE.MeshStandardMaterial({color});
+  const skin=new THREE.MeshStandardMaterial({color:0xffce8a});
   const part=(w,h,d,x,y,z,m)=>{const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);e.position.set(x,y,z);e.castShadow=true;g.add(e);return e;};
   part(.36,.9,.36,-.22,.45,0,cloth); part(.36,.9,.36,.22,.45,0,cloth);
   part(.9,1,.5,0,1.4,0,cloth); part(.3,.95,.3,-.62,1.45,0,skin); part(.3,.95,.3,.62,1.45,0,skin);
@@ -1093,6 +1140,7 @@ const NET={
       case 'shot': if(o.from&&o.to) tracer(new THREE.Vector3(o.from[0],o.from[1],o.from[2]),new THREE.Vector3(o.to[0],o.to[1],o.to[2]),o.color||0xffffff); break;
       case 'hit': if(o.target===this.id) takeMpDamage(o.dmg||10,o.id); break;
       case 'death': onMpDeath(o.id,o.by); break;
+      case 'forfeit': onForfeit(o.id); break;
     } },
   disconnect(){ if(this.ws){ try{ this.send({t:'leave'}); this.ws.close(); }catch(e){} this.ws=null; } this.connected=false; }
 };
@@ -1145,10 +1193,22 @@ function startArena(){ $('#lobbyScreen').classList.add('hidden'); $('#overScreen
   document.getElementById('wave').textContent='ARENA';
   document.getElementById('mapname').textContent=MAPS[selectedMap].name+' · MULTIPLAYER';
   for(const id in remotes){ const g=remotes[id].group; if(g.parent!==scene) scene.add(g); if(!shootTargets.includes(g)) shootTargets.push(g); }
-  mpScores[NET.id]=mpScores[NET.id]||0; $('#scoreboard').classList.add('on'); renderScoreboard();
+  mpScores[NET.id]=mpScores[NET.id]||0; $('#scoreboard').classList.add('on'); renderScoreboard(); showLeaveBtn(true);
   if(!IS_TOUCH) renderer.domElement.requestPointerLock(); }
 function leaveMp(){ gameMode='solo'; chatOpen=false; $('#mpChatInput').classList.remove('on');
   Object.keys(remotes).forEach(removeRemote); $('#scoreboard').classList.remove('on'); $('#mpChat').innerHTML=''; }
+function showLeaveBtn(on){ $('#leaveBtn').classList.toggle('on',on); }
+// in-game LEAVE button: go to lobby/menu; in MP the remaining player(s) win
+function doLeave(){ document.exitPointerLock?.(); showLeaveBtn(false); $('#victory').classList.remove('on'); firing=false;
+  if(gameMode==='mp'){ NET.send({t:'forfeit'}); leaveMp(); gameState='menu';
+    $('#lobbyScreen').classList.remove('hidden'); $('#startScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden'); }
+  else { gameState='menu'; $('#startScreen').classList.remove('hidden'); $('#overScreen').classList.add('hidden'); } }
+function onForfeit(id){ const name=mpNames[id]||'A player'; removeRemote(id);
+  pushMpChat(null,'🏳 '+name+' forfeited the match');
+  if(gameMode==='mp' && gameState==='playing' && Object.keys(remotes).length===0) showVictory(name+' forfeited — last one standing!'); }
+function showVictory(sub){ const v=$('#victory'); v.querySelector('.vsub').textContent=sub||''; v.classList.add('on');
+  sfx('level'); addXP(50); setTimeout(()=>v.classList.remove('on'),3600); }
+$('#leaveBtn').onclick=doLeave;
 
 $('#mpBtn').onclick=()=>{ $('#startScreen').classList.add('hidden'); $('#lobbyScreen').classList.remove('hidden'); gameState='menu';
   if(!$('#serverUrl').value) $('#serverUrl').value=DEFAULT_WS_URL;
@@ -1170,10 +1230,11 @@ window.RIVALS={ get state(){return gameState;}, get enemies(){return enemies;}, 
   melee, throwGrenade, explode, get grenades(){return grenades;}, get map(){return currentMap;},
   get profile(){return profile;}, addXP, unlockWeapon, isUnlocked, get curWeapon(){return curWeapon;},
   get medkits(){return medkits;}, get net(){return NET;}, get remotes(){return remotes;},
-  get gameMode(){return gameMode;}, get scores(){return mpScores;}, startArena, sendChat, mpRespawn,
+  get gameMode(){return gameMode;}, get scores(){return mpScores;}, startArena, sendChat, mpRespawn, doLeave,
+  get renderer(){return renderer;}, get composer(){return composer;},
   resetProfile(){ profile={level:1,xp:0,keys:0,unlocked:['smg']}; saveProfile(); updateProgUI(); },
   step(dt){ let d; if(dt!=null){d=Math.min(0.05,dt);clock.elapsedTime+=d;} else d=Math.min(0.05,clock.getDelta());
-    frame(d); renderer.render(scene,camera);
+    frame(d); renderFrame();
     return {state:gameState,enemies:enemies.length,toSpawn,kills,hp:Math.round(player.hp),py:+player.pos.y.toFixed(2),proj:projectiles.length}; } };
 
 rebuildLoadout(); buildViewModel(); updateWeaponUI(); updateNadeUI(); updateHP(); updateProgUI(); animate();

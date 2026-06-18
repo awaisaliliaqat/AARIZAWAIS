@@ -583,6 +583,11 @@ const weapons=[
  {id:'minigun',name:'MINIGUN',cost:11,blurb:'Bullet hose · huge mag',type:'hitscan',dmg:16,rpm:1150,auto:true,mag:150,reload:3.4,spread:0.045,pellets:1,range:110,recoil:.006,color:0xff7eb6,knock:1},
  {id:'railgun',name:'RAILGUN',cost:13,blurb:'Instant one-shot beam',type:'hitscan',dmg:185,rpm:38,auto:false,mag:4,reload:2.7,spread:0,pellets:1,range:420,recoil:.07,color:0x00e5ff,knock:14},
  {id:'bfg',name:'PLASMA CANNON',cost:18,blurb:'Devastating splash — the ultimate',type:'rocket',dmg:170,rpm:40,auto:false,mag:2,reload:3.2,range:200,recoil:.09,color:0x39ff14,speed:42,radius:10,splash:130,knock:30},
+ {id:'gatling',name:'GATLING LASER',cost:20,blurb:'Insane fire rate, melts everything',type:'hitscan',dmg:28,rpm:1300,auto:true,mag:200,reload:3.6,spread:0.03,pellets:1,range:140,recoil:.006,color:0xff4d6d,knock:2},
+ {id:'arc',name:'ARC RIFLE',cost:23,blurb:'Heavy full-auto energy slugs',type:'hitscan',dmg:48,rpm:680,auto:true,mag:50,reload:2.3,spread:0.008,pellets:1,range:190,recoil:.013,color:0x66e0ff,knock:5},
+ {id:'gauss',name:'GAUSS RIFLE',cost:27,blurb:'Pierces armor — instant one-shot',type:'hitscan',dmg:265,rpm:42,auto:false,mag:4,reload:2.6,spread:0,pellets:1,range:480,recoil:.08,color:0xffd23f,knock:18},
+ {id:'meteor',name:'METEOR LAUNCHER',cost:32,blurb:'Falling fire — colossal splash',type:'rocket',dmg:205,rpm:42,auto:false,mag:2,reload:3.3,range:220,recoil:.09,color:0xff7b00,speed:46,radius:12,splash:155,knock:36},
+ {id:'singularity',name:'SINGULARITY CANNON',cost:42,blurb:'A black hole in your hands — ultimate ring-out',type:'rocket',dmg:300,rpm:34,auto:false,mag:1,reload:3.9,range:200,recoil:.1,color:0xb06dff,speed:40,radius:16,splash:220,knock:52},
 ];
 let curWeapon=0; const ammo=weapons.map(w=>w.mag);
 let reloading=false, reloadEnd=0, lastShot=0, recoilV=0;
@@ -616,8 +621,8 @@ function addXP(n){ profile.xp+=n; xpGainedThisGame+=n;
   saveProfile(); updateLevelHUD(); }
 let loadout=[];   // indices of owned weapons, in weapon order
 // top number row maps to weapon slots 1..12  (1-9, 0, -, =)
-const WEAPON_KEYS=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal'];
-const KEY_LABELS=['1','2','3','4','5','6','7','8','9','0','-','='];
+const WEAPON_KEYS=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal','KeyZ','KeyX','KeyC','KeyB','KeyN'];
+const KEY_LABELS=['1','2','3','4','5','6','7','8','9','0','-','=','Z','X','C','B','N'];
 function rebuildLoadout(){ loadout=weapons.map((w,i)=>i).filter(isUnlocked); }
 function cycleWeapon(dir){ if(!loadout.length)return; let pos=loadout.indexOf(curWeapon);
   pos=(pos+dir+loadout.length)%loadout.length; selectWeapon(loadout[pos]); }
@@ -638,13 +643,13 @@ function buildViewModel(){
   const acc=new THREE.MeshStandardMaterial({color:w.color,emissive:w.color,emissiveIntensity:1.6,roughness:0.3,metalness:0.5});
   const mk=(sx,sy,sz,x,y,z,m)=>{const e=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),m);e.position.set(x,y,z);g.add(e);return e;};
   mk(0.14,0.16,0.5,0,-0.02,-0.2,body); mk(0.1,0.22,0.12,0,-0.18,0.02,body);
-  const id=w.id, longGun=(id==='sniper'||id==='railgun'||id==='crossbow'), rocketish=(id==='rocket'||id==='bfg');
+  const id=w.id, longGun=(id==='sniper'||id==='railgun'||id==='crossbow'||id==='gauss'), rocketish=(id==='rocket'||id==='bfg'||id==='meteor'||id==='singularity');
   const bl= longGun?0.7 : rocketish?0.5 : id==='shotgun'?0.34 : id==='minigun'?0.5 : 0.42;
   mk(rocketish?0.18:0.07, rocketish?0.18:0.07, bl, 0,0.01,-0.3-bl/2, body);
   mk(0.16,0.05,0.3,0,0.08,-0.18,acc);
   if(longGun){ const s=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.26,12),body);s.rotation.x=Math.PI/2;s.position.set(0,.12,-.18);g.add(s); }
   if(rocketish){ mk(0.22,0.22,0.2,0,0.02,-0.78,acc); }
-  if(id==='minigun'){ mk(0.16,0.16,0.42,0,0.01,-0.55,body); }
+  if(id==='minigun'||id==='gatling'){ mk(0.16,0.16,0.42,0,0.01,-0.55,body); }
   muzzle=new THREE.Object3D(); muzzle.position.set(0,0.01,-0.32-bl); g.add(muzzle);
   muzzleFlash=new THREE.Mesh(new THREE.PlaneGeometry(0.45,0.45),
     new THREE.MeshBasicMaterial({color:0xffe27a,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
@@ -905,7 +910,7 @@ function tryFire(){
 
   if(w.type==='rocket'){ sfx('shot'); const d=new THREE.Vector3(); camera.getWorldDirection(d); spawnRocket(mz,d,w); return; }
 
-  sfx((w.id==='sniper'||w.id==='railgun'||w.id==='crossbow')?'snipe':'shot');
+  sfx((w.id==='sniper'||w.id==='railgun'||w.id==='crossbow'||w.id==='gauss')?'snipe':'shot');
   let hitAny=false;
   for(let p=0;p<w.pellets;p++){
     camera.getWorldDirection(fwd);

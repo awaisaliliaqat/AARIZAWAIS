@@ -1126,7 +1126,7 @@ function frame(dt){
       document.getElementById('enemyleft').textContent=(1+Object.keys(remotes).length)+' PLAYERS'; }
     else { updateEnemies(dt);
       if(toSpawn>0){ spawnTimer-=dt; if(spawnTimer<=0&&enemies.length<5){ makeEnemy(); toSpawn--; spawnTimer=rnd(0.9,1.8); } }
-      if(toSpawn===0&&enemies.length===0) startWave(wave+1);
+      if(toSpawn===0&&enemies.length===0){ player.hp=player.maxhp; updateHP(); pushFeed('❤  WAVE CLEARED — HEALTH RESTORED'); startWave(wave+1); }
       document.getElementById('enemyleft').textContent=(enemies.length+toSpawn)+' RIVALS'; }
     updateProjectiles(dt); updateMedkits(dt); updateEffects(dt);
     if(firing&&weapons[curWeapon].auto) tryFire();

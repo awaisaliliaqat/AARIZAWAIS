@@ -46,11 +46,16 @@
   #wave{font-size:24px;font-weight:bold;color:var(--warn);text-shadow:0 2px 6px #000;}
   #enemyleft{font-size:12px;letter-spacing:2px;opacity:.75;margin-top:2px;}
 
-  #weapons{position:absolute;right:26px;bottom:24px;display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;max-width:520px;}
-  .wslot{width:70px;padding:6px 8px;border:2px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(10,16,26,.55);text-align:left;}
-  .wslot.active{border-color:var(--accent);box-shadow:0 0 14px rgba(0,229,255,.4);background:rgba(0,229,255,.08);}
+  #weapons{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:6px;flex-wrap:nowrap;
+    max-width:96vw;overflow-x:auto;overflow-y:hidden;padding:5px 6px;pointer-events:auto;z-index:6;
+    scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent;}
+  #weapons::-webkit-scrollbar{height:6px;}
+  #weapons::-webkit-scrollbar-thumb{background:rgba(255,255,255,.32);border-radius:3px;}
+  .wslot{flex:0 0 auto;width:64px;padding:5px 7px;border:2px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(10,16,26,.7);text-align:left;cursor:pointer;}
+  .wslot.active{border-color:var(--accent);box-shadow:0 0 14px rgba(0,229,255,.45);background:rgba(0,229,255,.12);}
   .wslot .num{font-size:11px;opacity:.6;}
-  .wslot .nm{font-size:12px;font-weight:bold;letter-spacing:.5px;}
+  .wslot .nm{font-size:11px;font-weight:bold;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  @media (pointer:coarse){ #weapons{max-width:72vw;bottom:12px;} .wslot{width:58px;} }
 
   #feed{position:absolute;left:50%;top:74px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;}
   .feedline{font-size:14px;background:rgba(0,0,0,.45);padding:3px 12px;border-radius:20px;animation:fade 2.6s forwards;border-left:3px solid var(--accent2);}
@@ -1029,7 +1034,9 @@ function renderWeaponSlots(){ const el=$('#weapons'); if(!el)return; el.innerHTM
     d.className='wslot'+(wi===curWeapon?' active':'');
     d.innerHTML='<div class="num">['+(KEY_LABELS[slot]||'•')+']</div><div class="nm">'+w.name+'</div>';
     d.onclick=()=>selectWeapon(wi);                 // tap/click a slot to equip it
-    el.appendChild(d); }); }
+    el.appendChild(d); });
+  const act=el.querySelector('.wslot.active');       // keep the equipped weapon scrolled into view
+  if(act) el.scrollLeft = act.offsetLeft - el.clientWidth/2 + act.clientWidth/2; }
 function updateLevelHUD(){ const l=$('#levelhud'); if(l) l.innerHTML='LVL '+profile.level+'  ·  '+profile.keys+' 🔑';
   const x=$('#xphud'); if(x) x.style.width=Math.min(100,profile.xp/xpNeeded(profile.level)*100)+'%'; }
 function updateWeaponUI(){ const w=weapons[curWeapon];

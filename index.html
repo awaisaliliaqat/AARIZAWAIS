@@ -14,12 +14,16 @@
 
   /* ---------- HUD ---------- */
   #hud{position:fixed;inset:0;pointer-events:none;z-index:5;}
-  #crosshair{position:absolute;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%);}
-  #crosshair div{position:absolute;background:#fff;box-shadow:0 0 3px #000;}
-  .ch-h{top:50%;height:2px;transform:translateY(-50%);}
-  .ch-v{left:50%;width:2px;transform:translateX(-50%);}
-  .ch-l{left:0;width:9px;}.ch-r{right:0;width:9px;}.ch-t{top:0;height:9px;}.ch-b{bottom:0;height:9px;}
-  #crosshair.hit div{background:var(--accent2);box-shadow:0 0 6px var(--accent2);}
+  #crosshair{position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);transition:transform .06s;}
+  #crosshair .ch{position:absolute;background:#eafcff;border-radius:1px;box-shadow:0 0 2px #000,0 0 5px rgba(0,229,255,.55);}
+  #crosshair .ch-t{left:50%;top:0;width:2px;height:10px;transform:translateX(-50%);}
+  #crosshair .ch-b{left:50%;bottom:0;width:2px;height:10px;transform:translateX(-50%);}
+  #crosshair .ch-l{top:50%;left:0;height:2px;width:10px;transform:translateY(-50%);}
+  #crosshair .ch-r{top:50%;right:0;height:2px;width:10px;transform:translateY(-50%);}
+  #crosshair .ch-dot{position:absolute;left:50%;top:50%;width:3px;height:3px;border-radius:50%;background:var(--accent);
+    transform:translate(-50%,-50%);box-shadow:0 0 5px var(--accent),0 0 2px #000;}
+  #crosshair.hit .ch{background:var(--accent2);box-shadow:0 0 7px var(--accent2);}
+  #crosshair.hit .ch-dot{background:#fff;box-shadow:0 0 7px #fff;}
   #hitflash{position:absolute;left:50%;top:50%;width:60px;height:60px;transform:translate(-50%,-50%) rotate(45deg);opacity:0;}
   #hitflash div{position:absolute;width:3px;height:14px;background:var(--accent2);border-radius:2px;}
 
@@ -196,7 +200,7 @@
 
 <div id="hud">
   <div id="vignette"></div>
-  <div id="crosshair"><div class="ch-h ch-l"></div><div class="ch-h ch-r"></div><div class="ch-v ch-t"></div><div class="ch-v ch-b"></div></div>
+  <div id="crosshair"><div class="ch ch-t"></div><div class="ch ch-b"></div><div class="ch ch-l"></div><div class="ch ch-r"></div><div class="ch-dot"></div></div>
   <div id="hitflash"><div style="left:0;top:0"></div><div style="right:0;top:0"></div><div style="left:0;bottom:0"></div><div style="right:0;bottom:0"></div></div>
 
   <div id="score"><div id="kills">0</div><div id="scoresub">Eliminations</div><div id="mapname">—</div>
@@ -636,26 +640,82 @@ function reload(){ const w=weapons[curWeapon];
   reloading=true; reloadEnd=clock.elapsedTime+w.reload; sfx('reload'); }
 
 // ---------- View model ----------
-let viewModel=null,muzzle=null,muzzleFlash=null;
+let viewModel=null,muzzle=null,muzzleFlash=null,metalMap=null;
+function getMetalMap(){
+  if(metalMap) return metalMap;
+  const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d');
+  x.fillStyle='#8b929c'; x.fillRect(0,0,128,128);
+  for(let i=0;i<2400;i++){ const y=Math.random()*128, len=18+Math.random()*70, xx=Math.random()*128, a=Math.random()*0.09;
+    x.strokeStyle=(Math.random()<0.5?'rgba(255,255,255,':'rgba(0,0,0,')+a+')';
+    x.beginPath(); x.moveTo(xx,y); x.lineTo(xx+len,y+(Math.random()-0.5)*1.2); x.stroke(); }
+  metalMap=new THREE.CanvasTexture(c); metalMap.wrapS=metalMap.wrapT=THREE.RepeatWrapping;
+  metalMap.colorSpace=THREE.SRGBColorSpace; metalMap.anisotropy=4; return metalMap;
+}
 function buildViewModel(){
   if(viewModel) camera.remove(viewModel);
-  const w=weapons[curWeapon], g=new THREE.Group();
-  const body=new THREE.MeshStandardMaterial({color:0x20262f});
-  const acc=new THREE.MeshStandardMaterial({color:w.color,emissive:w.color,emissiveIntensity:1.6,roughness:0.3,metalness:0.5});
-  const mk=(sx,sy,sz,x,y,z,m)=>{const e=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),m);e.position.set(x,y,z);g.add(e);return e;};
-  mk(0.14,0.16,0.5,0,-0.02,-0.2,body); mk(0.1,0.22,0.12,0,-0.18,0.02,body);
-  const id=w.id, longGun=(id==='sniper'||id==='railgun'||id==='crossbow'||id==='gauss'), rocketish=(id==='rocket'||id==='bfg'||id==='meteor'||id==='singularity');
-  const bl= longGun?0.7 : rocketish?0.5 : id==='shotgun'?0.34 : id==='minigun'?0.5 : 0.42;
-  mk(rocketish?0.18:0.07, rocketish?0.18:0.07, bl, 0,0.01,-0.3-bl/2, body);
-  mk(0.16,0.05,0.3,0,0.08,-0.18,acc);
-  if(longGun){ const s=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.26,12),body);s.rotation.x=Math.PI/2;s.position.set(0,.12,-.18);g.add(s); }
-  if(rocketish){ mk(0.22,0.22,0.2,0,0.02,-0.78,acc); }
-  if(id==='minigun'||id==='gatling'){ mk(0.16,0.16,0.42,0,0.01,-0.55,body); }
-  muzzle=new THREE.Object3D(); muzzle.position.set(0,0.01,-0.32-bl); g.add(muzzle);
-  muzzleFlash=new THREE.Mesh(new THREE.PlaneGeometry(0.45,0.45),
+  const w=weapons[curWeapon], id=w.id, g=new THREE.Group();
+  const metal=new THREE.MeshStandardMaterial({color:0x3a414c,map:getMetalMap(),metalness:0.92,roughness:0.36,envMapIntensity:1.1});
+  const dark =new THREE.MeshStandardMaterial({color:0x14171c,metalness:0.55,roughness:0.55});
+  const poly =new THREE.MeshStandardMaterial({color:0x0e1014,metalness:0.1,roughness:0.82});
+  const acc  =new THREE.MeshStandardMaterial({color:w.color,emissive:w.color,emissiveIntensity:2.0,metalness:0.4,roughness:0.3});
+  const box=(sx,sy,sz,x,y,z,m)=>{const e=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),m);e.position.set(x,y,z);g.add(e);return e;};
+  const cyl=(r1,r2,h,x,y,z,m,seg)=>{const e=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,seg||18),m);e.position.set(x,y,z);e.rotation.x=Math.PI/2;g.add(e);return e;};
+
+  const PISTOL=(id==='revolver'||id==='deagle');
+  const HEAVY=(id==='minigun'||id==='gatling');
+  const LONG=(id==='sniper'||id==='railgun'||id==='crossbow'||id==='gauss');
+  const LAUNCH=(id==='rocket'||id==='bfg'||id==='meteor'||id==='singularity');
+
+  // shared grip + trigger guard
+  box(0.12,0.30,0.14, 0,-0.20,0.05, poly);
+  box(0.10,0.07,0.16, 0,-0.05,0.04, dark);
+  let muzzleZ;
+
+  if(PISTOL){
+    box(0.13,0.21,0.5, 0,0.0,-0.18, metal);
+    cyl(0.045,0.045,0.42, 0,0.02,-0.42, dark);
+    if(id==='revolver') cyl(0.095,0.095,0.17, 0,-0.03,-0.10, metal,14);
+    box(0.135,0.035,0.22, 0,0.115,-0.16, acc);
+    muzzleZ=-0.62;
+  } else if(LAUNCH){
+    cyl(0.14,0.14,0.95, 0,0.02,-0.42, metal);
+    cyl(0.18,0.18,0.12, 0,0.02,-0.86, dark);
+    box(0.16,0.05,0.55, 0,0.17,-0.32, acc);
+    box(0.13,0.13,0.3, 0,-0.02,0.02, dark);
+    if(id==='bfg'||id==='singularity') cyl(0.21,0.21,0.1, 0,0.02,-0.9, acc, 20);
+    muzzleZ=-0.95;
+  } else if(HEAVY){
+    box(0.21,0.21,0.52, 0,0.0,-0.14, metal);
+    const bc=new THREE.Group();
+    for(let i=0;i<6;i++){ const a=i/6*Math.PI*2; const b=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,0.55,8),dark);
+      b.rotation.x=Math.PI/2; b.position.set(Math.cos(a)*0.075,Math.sin(a)*0.075,-0.5); bc.add(b); }
+    g.add(bc); g.userData.spin=bc;
+    box(0.17,0.05,0.42, 0,0.135,-0.14, acc);
+    muzzleZ=-0.82;
+  } else if(LONG){
+    box(0.12,0.15,0.74, 0,0.0,-0.26, metal);
+    cyl(0.038,0.038,0.72, 0,0.03,-0.62, dark);
+    box(0.11,0.19,0.18, 0,-0.02,0.2, poly);
+    cyl(0.055,0.055,0.32, 0,0.155,-0.2, dark, 16);
+    box(0.07,0.07,0.06, 0,0.155,-0.05, acc);
+    box(0.13,0.035,0.46, 0,0.085,-0.22, acc);
+    muzzleZ=-1.0;
+  } else { // rifle / smg / shotgun / arc / plasma
+    box(0.13,0.17,0.64, 0,0.0,-0.22, metal);
+    cyl(0.042,0.042,0.5, 0,0.03,-0.52, dark);
+    box(0.11,0.21,0.13, 0,-0.17,-0.04, dark);          // magazine
+    box(0.1,0.15,0.18, 0,-0.01,0.22, poly);            // stock
+    box(0.05,0.06,0.1, 0,0.12,-0.32, dark);            // front sight
+    box(0.14,0.035,0.46, 0,0.095,-0.22, acc);          // accent strip
+    if(id==='shotgun') cyl(0.045,0.045,0.5, 0,-0.06,-0.52, dark);
+    muzzleZ=-0.82;
+  }
+
+  muzzle=new THREE.Object3D(); muzzle.position.set(0,0.02,muzzleZ); g.add(muzzle);
+  muzzleFlash=new THREE.Mesh(new THREE.PlaneGeometry(0.55,0.55),
     new THREE.MeshBasicMaterial({color:0xffe27a,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
   muzzle.add(muzzleFlash);
-  g.position.set(0.22,-0.2,-0.4); viewModel=g; camera.add(g);
+  g.position.set(0.24,-0.22,-0.45); g.rotation.y=0.05; viewModel=g; camera.add(g);
 }
 
 // ---------- Support / collision ----------
@@ -1019,9 +1079,11 @@ function updatePlayer(dt){
   camera.position.set(player.pos.x+sx, player.pos.y+player.height+bob+sy, player.pos.z);
 
   // viewmodel sway + melee swing
-  if(viewModel){ const ty=reloading?-0.42:-0.2; viewModel.position.y+=(ty-viewModel.position.y)*Math.min(1,dt*10);
-    if(meleeAnim>0){ meleeAnim=Math.max(0,meleeAnim-dt*5); viewModel.rotation.x=-meleeAnim*1.2; viewModel.position.z=-0.4-meleeAnim*0.2; }
-    else { viewModel.rotation.x=0; viewModel.position.z=-0.4; }
+  if(viewModel){ const ty=reloading?-0.44:-0.22; viewModel.position.y+=(ty-viewModel.position.y)*Math.min(1,dt*10);
+    viewModel.position.x=0.24+(keys['KeyA']?-0.015:keys['KeyD']?0.015:0);
+    if(meleeAnim>0){ meleeAnim=Math.max(0,meleeAnim-dt*5); viewModel.rotation.x=-meleeAnim*1.2; viewModel.position.z=-0.45-meleeAnim*0.2; }
+    else { viewModel.rotation.x=0; viewModel.position.z=-0.45; }
+    if(viewModel.userData.spin && firing) viewModel.userData.spin.rotation.z+=dt*22;   // spin minigun/gatling barrels
     if(muzzleFlash) muzzleFlash.material.opacity*=Math.pow(0.0001,dt); }
 }
 

@@ -258,7 +258,7 @@
     <div class="controls">
       <b>WASD</b><span>Move</span><b>MOUSE</b><span>Look / aim</span>
       <b>L-CLICK</b><span>Shoot (hold for auto)</span><b>SPACE</b><span>Jump</span>
-      <b>SHIFT</b><span>Sprint</span><b>1-9 / scroll</b><span>Switch weapon</span>
+      <b>SHIFT</b><span>Sprint</span><b>1-9 0 - =</b><span>Switch weapon (or scroll wheel)</span>
       <b>R</b><span>Reload</span><b>G</b><span>Throw grenade</span><b>V</b><span>Melee knife</span>
     </div>
   </details>
@@ -551,7 +551,7 @@ addEventListener('keydown',e=>{
   if(chatOpen) return;                         // chat input has focus — don't drive the game
   if(gameMode==='mp' && gameState==='playing' && (e.code==='KeyT'||e.code==='Enter')){ e.preventDefault(); openMpChat(); return; }
   keys[e.code]=true;
-  const dm=e.code.match(/^Digit([1-9])$/); if(dm){ const s=+dm[1]-1; if(s<loadout.length) selectWeapon(loadout[s]); }
+  const ws=WEAPON_KEYS.indexOf(e.code); if(ws>=0){ if(ws<loadout.length){ e.preventDefault(); selectWeapon(loadout[ws]); } }
   if(e.code==='KeyR')reload(); if(e.code==='KeyG')throwGrenade(); if(e.code==='KeyV')melee(); });
 addEventListener('keyup',e=> keys[e.code]=false);
 addEventListener('mousedown',e=>{ if(e.button===0) startFire(); });
@@ -613,6 +613,9 @@ function addXP(n){ profile.xp+=n; xpGainedThisGame+=n;
     pushFeed('⭐ LEVEL '+profile.level+'  ·  +'+k+' 🔑'); sfx('level'); }
   saveProfile(); updateLevelHUD(); }
 let loadout=[];   // indices of owned weapons, in weapon order
+// top number row maps to weapon slots 1..12  (1-9, 0, -, =)
+const WEAPON_KEYS=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal'];
+const KEY_LABELS=['1','2','3','4','5','6','7','8','9','0','-','='];
 function rebuildLoadout(){ loadout=weapons.map((w,i)=>i).filter(isUnlocked); }
 function cycleWeapon(dir){ if(!loadout.length)return; let pos=loadout.indexOf(curWeapon);
   pos=(pos+dir+loadout.length)%loadout.length; selectWeapon(loadout[pos]); }
@@ -930,7 +933,7 @@ const $=s=>document.querySelector(s);
 function renderWeaponSlots(){ const el=$('#weapons'); if(!el)return; el.innerHTML='';
   loadout.forEach((wi,slot)=>{ const w=weapons[wi]; const d=document.createElement('div');
     d.className='wslot'+(wi===curWeapon?' active':'');
-    d.innerHTML='<div class="num">['+(slot+1)+']</div><div class="nm">'+w.name+'</div>';
+    d.innerHTML='<div class="num">['+(KEY_LABELS[slot]||'•')+']</div><div class="nm">'+w.name+'</div>';
     d.onclick=()=>selectWeapon(wi);                 // tap/click a slot to equip it
     el.appendChild(d); }); }
 function updateLevelHUD(){ const l=$('#levelhud'); if(l) l.innerHTML='LVL '+profile.level+'  ·  '+profile.keys+' 🔑';

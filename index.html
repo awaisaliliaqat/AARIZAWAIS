@@ -45,6 +45,7 @@
   #topright{position:absolute;right:26px;top:16px;text-align:right;}
   #wave{font-size:24px;font-weight:bold;color:var(--warn);text-shadow:0 2px 6px #000;}
   #enemyleft{font-size:12px;letter-spacing:2px;opacity:.75;margin-top:2px;}
+  #keyhud{font-size:18px;font-weight:bold;color:var(--warn);letter-spacing:1px;margin-top:8px;text-shadow:0 2px 6px #000;}
 
   #weapons{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:6px;flex-wrap:nowrap;
     max-width:96vw;overflow-x:auto;overflow-y:hidden;padding:5px 6px;pointer-events:auto;z-index:6;
@@ -113,6 +114,8 @@
   .mapcard .mc-tag{display:inline-block;margin-top:6px;font-size:10px;letter-spacing:1px;padding:2px 7px;border-radius:10px;text-transform:uppercase;}
   .tag-void{background:rgba(255,46,99,.2);color:#ff8aa6;}
   .tag-floor{background:rgba(57,255,20,.18);color:#9dff8a;}
+  .tag-hard{background:rgba(255,159,28,.22);color:#ffc06b;}
+  .tag-extreme{background:rgba(255,46,99,.28);color:#ff6f91;}
 
   .settings{margin-top:18px;display:flex;align-items:center;gap:12px;font-size:13px;letter-spacing:1px;flex-wrap:wrap;justify-content:center;}
   .settings input{accent-color:var(--accent);width:180px;}
@@ -252,7 +255,7 @@
   <div id="score"><div id="kills">0</div><div id="scoresub">Eliminations</div><div id="mapname">—</div>
     <div id="levelhud">LVL 1 · 0 🔑</div><div id="xpbar"><div id="xphud"></div></div></div>
   <div id="feed"></div>
-  <div id="topright"><div id="wave">WAVE 1</div><div id="enemyleft">0 RIVALS</div></div>
+  <div id="topright"><div id="wave">WAVE 1</div><div id="enemyleft">0 RIVALS</div><div id="keyhud">🔑 0 KEYS</div></div>
 
   <div id="stats">
     <div id="hpwrap"><div class="stat-label">Health</div><div id="hpbar"><div id="hpfill"></div></div></div>
@@ -526,7 +529,7 @@ const staticColliders=[];     // {min,max}
 const obstacleMeshes=[];      // bullet/LOS targets (walls/boxes/floor/movers)
 const shootTargets=[];        // obstacleMeshes + enemy groups
 let jumpPads=[], movers=[], medkits=[];
-let killY=null, hasFloor=true, currentMap=null;
+let killY=null, hasFloor=true, currentMap=null, mapDiff=1;
 
 function addBox(w,h,d,x,y,z,color,opts={}){
   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color,roughness:0.6,metalness:0.08,envMapIntensity:0.5}));
@@ -615,6 +618,26 @@ const MAPS=[
    movers:[{size:[6,1.4,8],pos:[0,5,0],color:0xffd23f,axis:'z',amp:11,speed:0.6,phase:0},
            {size:[8,1.4,6],pos:[0,3,0],color:0xff9f1c,axis:'x',amp:11,speed:0.6,phase:2}],
    spawns:[[0,22],[0,-22],[22,0],[-22,0],[6,20],[-6,-20]] },
+
+ { id:'inferno', name:'INFERNO PIT', desc:'HARD — relentless tougher waves. More keys per wave.', diff:2,
+   thumb:'linear-gradient(160deg,#5a1a0a,#1a0300)', void:null, walls:true,
+   spawn:[0,0,38,0],
+   boxes:[[7,8,7,0,4,0],[5,6,5,-22,3,-22],[5,6,5,22,3,22],[5,6,5,-22,3,22],[5,6,5,22,3,-22],
+     [10,1.5,10,-30,0.75,0],[10,1.5,10,30,0.75,0],[3,4,3,0,2,-24],[3,4,3,0,2,24],
+     [4,3,4,-12,1.5,12],[4,3,4,12,1.5,-12],[2,6,2,-34,3,-34],[2,6,2,34,3,34]],
+   pads:[[-30,0,6,6,15],[30,0,6,6,15]],
+   movers:[{size:[7,1.4,7],pos:[0,1,0],color:0xff5a1f,axis:'y',amp:4,speed:0.9,phase:0}],
+   spawns:[[-32,-32],[32,32],[-32,32],[32,-32],[0,-34],[0,34],[-34,0],[34,0]] },
+
+ { id:'nightmare', name:'NIGHTMARE', desc:'EXTREME — brutal swarms over the abyss. Huge key rewards.', diff:3,
+   thumb:'linear-gradient(160deg,#3a0a3a,#0a000a)', void:-18, walls:false,
+   spawn:[0,0,4,0],
+   boxes:[[14,2,14,0,-1,0],[8,2,8,0,-1,-24],[8,2,8,0,-1,24],[8,2,8,24,-1,0],[8,2,8,-24,-1,0],
+     [5,2,5,0,3,0],[4,1,4,16,-1,16],[4,1,4,-16,-1,-16]],
+   pads:[[0,6,4,4,18],[0,-6,4,4,18],[6,0,4,4,18],[-6,0,4,4,18]],
+   movers:[{size:[5,2,5],pos:[0,-1,-12],color:0xb06dff,axis:'z',amp:5,speed:0.9,phase:0},
+           {size:[5,2,5],pos:[12,-1,0],color:0xff2e63,axis:'x',amp:5,speed:0.9,phase:1.5}],
+   spawns:[[0,-24],[0,24],[24,0],[-24,0],[16,16],[-16,-16]] },
 ];
 let selectedMap=0;
 
@@ -625,7 +648,7 @@ function buildMap(def){
   mapGroup=new THREE.Group(); scene.add(mapGroup);
   staticColliders.length=0; obstacleMeshes.length=0; shootTargets.length=0;
   jumpPads=[]; movers=[];
-  killY=def.void; hasFloor=def.void==null; currentMap=def;
+  killY=def.void; hasFloor=def.void==null; currentMap=def; mapDiff=def.diff||1;
 
   if(hasFloor){
     scene.background=SKY_TEX; scene.fog=new THREE.FogExp2(0xbcd8f0, 0.0085);
@@ -951,7 +974,8 @@ function makeEnemy(){
   const top=supportTopAt(pick[0],pick[1],0.5,1e9);
   g.position.set(pick[0], top<=-1e8?0:top, pick[1]);
   mapGroup.add(g); shootTargets.push(g);
-  const e={group:g,hp:160,maxhp:160,speed:rnd(2.5,3.5),nextShot:clock.elapsedTime+rnd(1.3,2.4),
+  const ehp=160+(mapDiff-1)*90;   // tankier enemies on harder maps
+  const e={group:g,hp:ehp,maxhp:ehp,speed:rnd(2.5,3.5)+(mapDiff-1)*0.45,nextShot:clock.elapsedTime+rnd(1.3,2.4),
     color:col,legs:[ll,rl],walkT:Math.random()*6,vel:new THREE.Vector3(),airT:0,grounded:true,
     strafe:Math.random()<.5?1:-1,strafeT:0};
   enemies.push(e); return e;
@@ -1021,7 +1045,7 @@ function updateEnemies(dt){
     if(e.grounded && clock.elapsedTime>e.nextShot && eEye.distanceTo(pEye)<62 && hasLOS(eEye,pEye)){
       e.nextShot=clock.elapsedTime+rnd(1.5,2.6); tracer(eEye,pEye,0xff2e63);
       const dist=eEye.distanceTo(pEye), chance=Math.max(.16,.62-dist*.016);
-      if(Math.random()<chance && player.alive) hurtPlayer(rnd(5,9));
+      if(Math.random()<chance && player.alive) hurtPlayer(rnd(5,9)*(1+(mapDiff-1)*0.45));
     }
   }
 }
@@ -1211,6 +1235,7 @@ function openWeaponPanel(){ if(gameState!=='playing')return; renderWeaponPanel()
 function closeWeaponPanel(){ $('#weaponPanel').classList.remove('on'); if(!IS_TOUCH && gameState==='playing') renderer.domElement.requestPointerLock(); }
 function toggleWeaponPanel(){ if($('#weaponPanel').classList.contains('on')) closeWeaponPanel(); else openWeaponPanel(); }
 function updateLevelHUD(){ const l=$('#levelhud'); if(l) l.innerHTML='LVL '+profile.level+'  ·  '+profile.keys+' 🔑';
+  const k=$('#keyhud'); if(k) k.textContent='🔑 '+profile.keys+' KEYS';
   const x=$('#xphud'); if(x) x.style.width=Math.min(100,profile.xp/xpNeeded(profile.level)*100)+'%'; }
 function updateWeaponUI(){ const w=weapons[curWeapon];
   $('#ammo').innerHTML=ammo[curWeapon]+'<small>/'+w.mag+'</small>'; $('#wpnname').textContent=w.name;
@@ -1226,7 +1251,7 @@ function damageVignette(){ $('#vignette').style.boxShadow='inset 0 0 160px 50px 
 
 // ---------- Waves ----------
 let wave=0,kills=0,score=0,toSpawn=0,spawnTimer=0;
-function startWave(n){ wave=n; toSpawn=2+n; spawnTimer=0;
+function startWave(n){ wave=n; toSpawn=2+n+(mapDiff-1)*2; spawnTimer=0;
   document.getElementById('wave').textContent='WAVE '+n; pushFeed('⚔  WAVE '+n+' INCOMING'); }
 
 function hurtPlayer(d){ player.hp-=d; player.lastHit=clock.elapsedTime; updateHP(); damageVignette(); sfx('hurt');
@@ -1342,9 +1367,12 @@ renderer.domElement.addEventListener('click',()=>{ if(gameState==='playing'&&!lo
 
 // map cards + sens
 const mapsEl=$('#maps');
+const DIFF_TAG=['','tag-floor','tag-hard','tag-extreme'], DIFF_TXT=['','NORMAL','HARD ⚠','EXTREME 💀'];
 MAPS.forEach((m,i)=>{ const c=document.createElement('div'); c.className='mapcard'+(i===selectedMap?' sel':'');
+  const d=m.diff||1, keys='+'+d+'🔑/wave';
   c.innerHTML=`<div class="thumb" style="background:${m.thumb}"></div><div class="mc-body"><div class="mc-name">${m.name}</div>
-    <div class="mc-desc">${m.desc}</div><span class="mc-tag ${m.void!=null?'tag-void':'tag-floor'}">${m.void!=null?'Ring-Out':'Survival'}</span></div>`;
+    <div class="mc-desc">${m.desc}</div><span class="mc-tag ${m.void!=null?'tag-void':'tag-floor'}">${m.void!=null?'Ring-Out':'Survival'}</span>
+    <span class="mc-tag ${DIFF_TAG[d]}">${DIFF_TXT[d]} · ${keys}</span></div>`;
   c.onclick=()=>{ selectedMap=i; document.querySelectorAll('.mapcard').forEach(x=>x.classList.remove('sel')); c.classList.add('sel'); };
   mapsEl.appendChild(c); });
 $('#sens').oninput=e=>{ const v=+e.target.value; sens=0.00022*v; $('#sensVal').textContent=(v/10).toFixed(1)+'×'; };
@@ -1449,8 +1477,10 @@ function frame(dt){
     if(gameMode==='mp'){ updateRemotes(dt); netTick(dt);
       document.getElementById('enemyleft').textContent=(1+Object.keys(remotes).length)+' PLAYERS'; }
     else { updateEnemies(dt);
-      if(toSpawn>0){ spawnTimer-=dt; if(spawnTimer<=0&&enemies.length<4){ makeEnemy(); toSpawn--; spawnTimer=rnd(1.0,1.9); } }
-      if(toSpawn===0&&enemies.length===0){ player.hp=player.maxhp; updateHP(); pushFeed('❤  WAVE CLEARED — HEALTH RESTORED'); startWave(wave+1); }
+      if(toSpawn>0){ spawnTimer-=dt; if(spawnTimer<=0&&enemies.length<(3+mapDiff)){ makeEnemy(); toSpawn--; spawnTimer=rnd(1.0,1.9)/(1+(mapDiff-1)*0.25); } }
+      if(toSpawn===0&&enemies.length===0){ player.hp=player.maxhp; updateHP();
+        const kr=mapDiff; profile.keys+=kr; keysEarnedThisGame+=kr; saveProfile(); updateLevelHUD();   // harder maps = more keys per wave
+        pushFeed('❤  WAVE CLEARED · +'+kr+' 🔑 · HEALTH RESTORED'); startWave(wave+1); }
       document.getElementById('enemyleft').textContent=(enemies.length+toSpawn)+' RIVALS'; }
     updateProjectiles(dt); updateMedkits(dt); updateEffects(dt);
     if(firing&&weapons[curWeapon].auto) tryFire();

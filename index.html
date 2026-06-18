@@ -91,8 +91,10 @@
   @keyframes rspin{to{transform:rotate(360deg);}}
 
   /* ---------- Overlays ---------- */
-  .overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    text-align:center;padding:20px;overflow:auto;background:radial-gradient(circle at 50% 30%,rgba(0,40,70,.92),rgba(5,8,14,.97));}
+  .overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+    text-align:center;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch;background:radial-gradient(circle at 50% 30%,rgba(0,40,70,.92),rgba(5,8,14,.97));}
+  /* spacers center the content when it fits, but collapse so the top is always reachable when it overflows */
+  .overlay::before,.overlay::after{content:"";margin:auto;flex:0 0 0;}
   .overlay.hidden{display:none;}
   .title{font-size:64px;font-weight:900;letter-spacing:4px;
     background:linear-gradient(90deg,var(--accent),#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;
@@ -939,7 +941,7 @@ function updateProjectiles(dt){
       const top=supportTopAt(pr.mesh.position.x,pr.mesh.position.z,0.2,pr.mesh.position.y+0.5);
       if(top>-1e8&&pr.mesh.position.y<top+0.2){ pr.mesh.position.y=top+0.2; pr.vel.y*=-0.4; pr.vel.x*=0.6; pr.vel.z*=0.6; }
       pr.fuse-=dt;
-      if(pr.fuse<=0 || (killY!=null&&pr.mesh.position.y<killY)){ explode(pr.mesh.position,6,42,16,true); mapGroup.remove(pr.mesh); projectiles.splice(i,1); }
+      if(pr.fuse<=0 || (killY!=null&&pr.mesh.position.y<killY)){ explode(pr.mesh.position,7.5,110,26,true); mapGroup.remove(pr.mesh); projectiles.splice(i,1); }
       continue;
     }
     // rocket

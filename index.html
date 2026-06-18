@@ -790,6 +790,7 @@ const weapons=[
  {id:'flak',name:'FLAK CANNON',cost:36,blurb:'Explosive flak — devastating up close',type:'hitscan',dmg:20,rpm:90,auto:false,mag:5,reload:2.0,spread:0.09,pellets:7,range:46,recoil:.05,color:0xff7b00,knock:9},
  {id:'photon',name:'PHOTON RIFLE',cost:52,blurb:'Hyper-fast precision energy beams',type:'hitscan',dmg:44,rpm:680,auto:true,mag:45,reload:2.0,spread:0.006,pellets:1,range:210,recoil:.012,color:0x00ffea,knock:4},
  {id:'apocalypse',name:'APOCALYPSE',cost:80,blurb:'Colossal nuke blast — flattens everything',type:'rocket',dmg:250,rpm:34,auto:false,mag:2,reload:3.5,range:210,recoil:.1,color:0xff2e63,speed:44,radius:14,splash:190,knock:42},
+ {id:'cataclysm',name:'CATACLYSM',cost:130,blurb:'1000 damage + a SUPER-MASSIVE explosion',type:'rocket',dmg:1000,rpm:24,auto:false,mag:1,reload:4.2,range:220,recoil:.13,color:0xff8a00,speed:46,radius:26,splash:700,knock:70},
  {id:'ownergod',name:'ONE SHOT OWNER',cost:0,ownerOnly:true,blurb:'👑 OWNER-ONLY — one-shot minigun · 500 ammo · free',type:'hitscan',dmg:676767,rpm:1150,auto:true,mag:500,reload:2.0,spread:0.025,pellets:1,range:600,recoil:.015,color:0xffd23f,knock:45},
 ];
 
@@ -888,8 +889,8 @@ function addXP(n){ profile.xp+=n; xpGainedThisGame+=n;
   saveProfile(); updateLevelHUD(); }
 let loadout=[];   // indices of owned weapons, in weapon order
 // top number row maps to weapon slots 1..12  (1-9, 0, -, =)
-const WEAPON_KEYS=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal','KeyZ','KeyX','KeyC','KeyB','KeyN','KeyM','Comma','Period','Slash','Backslash','BracketLeft','BracketRight','Semicolon'];
-const KEY_LABELS=['1','2','3','4','5','6','7','8','9','0','-','=','Z','X','C','B','N','M',',','.','/','\\','[',']',';'];
+const WEAPON_KEYS=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal','KeyZ','KeyX','KeyC','KeyB','KeyN','KeyM','Comma','Period','Slash','Backslash','BracketLeft','BracketRight','Semicolon','Quote'];
+const KEY_LABELS=['1','2','3','4','5','6','7','8','9','0','-','=','Z','X','C','B','N','M',',','.','/','\\','[',']',';',"'"];
 function rebuildLoadout(){ loadout=weapons.map((w,i)=>i).filter(isUnlocked); }
 function cycleWeapon(dir){ if(!loadout.length)return; let pos=loadout.indexOf(curWeapon);
   pos=(pos+dir+loadout.length)%loadout.length; selectWeapon(loadout[pos]); }
@@ -926,7 +927,7 @@ function buildViewModel(){
   const PISTOL=(id==='revolver'||id==='deagle');
   const HEAVY=(id==='minigun'||id==='gatling'||id==='inferno'||id==='ownergod');
   const LONG=(id==='sniper'||id==='railgun'||id==='crossbow'||id==='gauss'||id==='antimatter');
-  const LAUNCH=(id==='rocket'||id==='bfg'||id==='meteor'||id==='singularity'||id==='gl'||id==='apocalypse');
+  const LAUNCH=(id==='rocket'||id==='bfg'||id==='meteor'||id==='singularity'||id==='gl'||id==='apocalypse'||id==='cataclysm');
 
   // shared grip + trigger guard
   box(0.12,0.30,0.14, 0,-0.20,0.05, poly);
@@ -1160,7 +1161,15 @@ function updateProjectiles(dt){
   }
 }
 function explode(center,radius,dmg,knock,fromPlayer){
-  burst(center,0xffa600,24); flash(center); sfx('explode'); shake=Math.max(shake,0.5);
+  const big=Math.max(1, radius/7);   // scale visuals with blast size
+  burst(center,0xffa600, Math.min(130, Math.round(20*big)));
+  const fl=new THREE.PointLight(0xffb347, 6*big, 16*big); fl.position.copy(center); scene.add(fl);
+  effects.push({mesh:fl,life:Math.min(0.55,0.18*big),t:0,type:'light',base:6*big});
+  // expanding shockwave ring
+  const sw=new THREE.Mesh(new THREE.SphereGeometry(1,18,12),
+    new THREE.MeshBasicMaterial({color:0xffd27a,transparent:true,opacity:0.5,blending:THREE.AdditiveBlending,depthWrite:false}));
+  sw.position.copy(center); scene.add(sw); effects.push({mesh:sw,life:Math.min(0.6,0.28*big),t:0,type:'shock',maxR:radius});
+  sfx('explode'); shake=Math.max(shake, Math.min(2.0, 0.45*big));
   for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i];
     const c=e.group.position.clone().setY(e.group.position.y+1.2);
     const dist=c.distanceTo(center); if(dist>radius)continue;
@@ -1208,6 +1217,7 @@ function updateEffects(dt){
       f.mesh.rotation.x+=dt*6; f.mesh.rotation.y+=dt*5; }
     else if(f.type==='tracer'){ f.mesh.material.opacity=Math.max(0,.9*(1-f.t/f.life)); }
     else if(f.type==='light'){ f.mesh.intensity=f.base*(1-f.t/f.life); }
+    else if(f.type==='shock'){ const k=f.t/f.life; f.mesh.scale.setScalar(0.5+k*f.maxR); f.mesh.material.opacity=0.5*(1-k); }
     if(f.t>=f.life){ scene.remove(f.mesh); f.mesh.geometry?.dispose?.(); effects.splice(i,1); } }
 }
 let AC=null;

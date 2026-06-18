@@ -368,6 +368,10 @@ import { EffectComposer } from './jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from './jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from './jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from './jsm/postprocessing/ShaderPass.js';
+import { SMAAPass } from './jsm/postprocessing/SMAAPass.js';
+import { GTAOPass } from './jsm/postprocessing/GTAOPass.js';
+import { Sky } from './jsm/objects/Sky.js';
 import { RoomEnvironment } from './jsm/environments/RoomEnvironment.js';
 
 /* =======================================================================
@@ -404,13 +408,47 @@ const sc = sun.shadow.camera; sc.left=-90;sc.right=90;sc.top=90;sc.bottom=-90;sc
 sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.02; scene.add(sun);
 const rim = new THREE.DirectionalLight(0x88bbff, 0.6); rim.position.set(-40,30,-30); scene.add(rim);
 
-// ---------- Post-processing (bloom) ----------
-const composer = new EffectComposer(renderer);
+// ---------- Post-processing : Render -> AO -> Bloom -> Grade -> SMAA -> Output ----------
+// multisampled HalfFloat RT so MSAA survives the bloom path (desktop); samples 0 on mobile
+const composerRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type:THREE.HalfFloatType, samples: COARSE?0:4 });
+const composer = new EffectComposer(renderer, composerRT);
 composer.addPass(new RenderPass(scene, camera));
+
+// ground-truth ambient occlusion (desktop only) — grounds objects with contact shadows
+let aoPass = null;
+if(!COARSE){
+  aoPass = new GTAOPass(scene, camera, innerWidth, innerHeight);
+  aoPass.output = GTAOPass.OUTPUT.Default;
+  aoPass.blendIntensity = 0.9;
+  aoPass.updateGtaoMaterial({ radius:0.5, distanceExponent:1.0, thickness:1.0, scale:1.0, samples:16, distanceFallOff:1.0, screenSpaceRadius:false });
+  aoPass.updatePdMaterial({ lumaPhi:10, depthPhi:2, normalPhi:3, radius:4, radiusExponent:1, rings:2, samples:16 });
+  composer.addPass(aoPass);
+}
+
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),
   COARSE?0.55:0.75, 0.55, 0.82);   // strength, radius, threshold
 composer.addPass(bloom);
-composer.addPass(new OutputPass());
+
+// cinematic color grade: contrast S-curve + split-tone + vignette (linear space, no sRGB re-encode)
+const GradeShader = {
+  uniforms:{ tDiffuse:{value:null}, contrast:{value:1.06}, vig:{value:0.34},
+    coolSh:{value:new THREE.Color(0.95,0.99,1.07)}, warmHi:{value:new THREE.Color(1.06,1.0,0.93)} },
+  vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader:'uniform sampler2D tDiffuse; uniform float contrast,vig; uniform vec3 coolSh,warmHi; varying vec2 vUv;\n'+
+    'void main(){ vec4 c=texture2D(tDiffuse,vUv); vec3 col=c.rgb;\n'+
+    ' col=(col-0.5)*contrast+0.5;\n'+
+    ' float l=clamp(dot(col,vec3(0.299,0.587,0.114)),0.0,1.0);\n'+
+    ' col*=mix(coolSh,warmHi,l);\n'+
+    ' vec2 d=vUv-0.5; col*=1.0-dot(d,d)*vig;\n'+
+    ' gl_FragColor=vec4(max(col,0.0),c.a); }'
+};
+const grade = new ShaderPass(GradeShader);
+composer.addPass(grade);
+
+const smaa = new SMAAPass(innerWidth, innerHeight);
+composer.addPass(smaa);
+
+composer.addPass(new OutputPass());   // LAST: final tone map + sRGB encode
 function renderFrame(){ composer.render(); }
 
 // gradient sky backdrops
@@ -418,7 +456,14 @@ function gradTex(c1,c2){ const cv=document.createElement('canvas'); cv.width=8; 
   const g=cv.getContext('2d'); const grd=g.createLinearGradient(0,0,0,256);
   grd.addColorStop(0,c1); grd.addColorStop(1,c2); g.fillStyle=grd; g.fillRect(0,0,8,256);
   const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; return t; }
-const SKY_TEX=gradTex('#3f86c8','#d4ecff'), VOID_TEX=gradTex('#060b1c','#16305a');
+const VOID_TEX=gradTex('#060b1c','#16305a');
+// richer 3-stop sky gradient (deep zenith -> sky blue -> pale horizon)
+function gradTex3(a,b,c){ const cv=document.createElement('canvas'); cv.width=8; cv.height=256;
+  const g=cv.getContext('2d'); const grd=g.createLinearGradient(0,0,0,256);
+  grd.addColorStop(0,a); grd.addColorStop(0.55,b); grd.addColorStop(1,c); g.fillStyle=grd; g.fillRect(0,0,8,256);
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; return t; }
+const SKY_TEX=gradTex3('#2f6fb8','#6fb0e6','#cfe8fb');
+const skyDome=null;
 
 const GRAV = 24;
 function rnd(a,b){ return a+Math.random()*(b-a); }
@@ -532,14 +577,16 @@ function buildMap(def){
   killY=def.void; hasFloor=def.void==null; currentMap=def;
 
   if(hasFloor){
-    scene.background=SKY_TEX; scene.fog=new THREE.Fog(0xb9ddf5,65,175);
+    scene.background=SKY_TEX; scene.fog=new THREE.FogExp2(0xbcd8f0, 0.0085);
+    if(skyDome){ syncSky(); scene.add(skyDome); }
     const floor=new THREE.Mesh(new THREE.PlaneGeometry(120,120), new THREE.MeshStandardMaterial({color:0x32404f,roughness:0.35,metalness:0.25,envMapIntensity:0.7}));
     floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; mapGroup.add(floor);
     obstacleMeshes.push(floor); shootTargets.push(floor);
     const grid=new THREE.GridHelper(120,48,0x00e5ff,0x2b3340);
     grid.material.opacity=.25; grid.material.transparent=true; grid.position.y=.02; mapGroup.add(grid);
   } else {
-    scene.background=VOID_TEX; scene.fog=new THREE.Fog(0x0a1730,45,155);
+    if(skyDome) scene.remove(skyDome);
+    scene.background=VOID_TEX; scene.fog=new THREE.FogExp2(0x0a1730, 0.014);
     const voidPlane=new THREE.Mesh(new THREE.PlaneGeometry(300,300),
       new THREE.MeshBasicMaterial({color:0x05101f}));
     voidPlane.rotation.x=-Math.PI/2; voidPlane.position.y=def.void-6; mapGroup.add(voidPlane);
@@ -555,6 +602,11 @@ function buildMap(def){
   def.pads.forEach(p=> addPad(p[0],p[1],p[2],p[3],p[4]));
   (def.movers||[]).forEach(m=> addMover(m.size,m.pos,m.color,m.axis,m.amp,m.speed,m.phase));
   buildMedkits(def);
+  // colored accent lights for mood (echo the neon HUD); never cast shadows (perf)
+  const accentL=(c,x,y,z,i,d)=>{ const l=new THREE.PointLight(c,i,d,2); l.position.set(x,y,z); l.castShadow=false; mapGroup.add(l); };
+  accentL(0x00e5ff,-18,4,-18,COARSE?5:9,30); accentL(0xff2e63,18,4,18,COARSE?5:9,30);
+  if(!COARSE) accentL(0xffd23f,0,7,0,6,26);
+  if(aoPass) aoPass.blendIntensity = (def.void==null)?0.9:0.55;   // gentler AO on void maps
 }
 
 // ---------- Medkits (health pickups) ----------
@@ -617,7 +669,8 @@ addEventListener('mousemove',e=>{ if(!locked)return;
   const lim=Math.PI/2-0.05; player.pitch=Math.max(-lim,Math.min(lim,player.pitch)); });
 document.addEventListener('pointerlockchange',()=> locked=(document.pointerLockElement===renderer.domElement));
 addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight); });
+  renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight);
+  if(aoPass) aoPass.setSize(innerWidth,innerHeight); smaa.setSize(innerWidth,innerHeight); });
 
 function startFire(){ firing=true; if(gameState==='playing'&&!weapons[curWeapon].auto) tryFire(); }
 function releaseFire(){ firing=false; }
@@ -1164,6 +1217,7 @@ function updatePlayer(dt){
   const bob=(player.onGround&&moveDir.lengthSq()>0)?Math.sin(clock.elapsedTime*(sprint?14:10))*0.045:0;
   let sx=0,sy=0; if(shake>0){ sx=rnd(-1,1)*shake*0.15; sy=rnd(-1,1)*shake*0.15; shake=Math.max(0,shake-dt*2.5); }
   camera.position.set(player.pos.x+sx, player.pos.y+player.height+bob+sy, player.pos.z);
+  if(skyDome&&skyDome.parent) skyDome.position.copy(camera.position);   // sky stays centered on the camera
 
   // viewmodel sway + melee swing
   if(viewModel){ const ty=reloading?-0.44:-0.22; viewModel.position.y+=(ty-viewModel.position.y)*Math.min(1,dt*10);

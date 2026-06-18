@@ -1468,6 +1468,7 @@ const NET={
       case 'death': onMpDeath(o.id,o.by); break;
       case 'forfeit': onForfeit(o.id); break;
       case 'cheat': onCheat(o.id); break;
+      case 'win': onWin(o.id,o.name); break;
     } },
   disconnect(){ if(this.ws){ try{ this.send({t:'leave'}); this.ws.close(); }catch(e){} this.ws=null; } this.connected=false; }
 };
@@ -1536,11 +1537,18 @@ function doLeave(){ document.exitPointerLock?.(); showLeaveBtn(false); $('#victo
   updateRotateHint(); }
 function onForfeit(id){ const name=mpNames[id]||'A player'; removeRemote(id);
   pushMpChat(null,'🏳 '+name+' forfeited the match');
-  if(gameMode==='mp' && gameState==='playing' && Object.keys(remotes).length===0) showVictory(name+' forfeited — last one standing!'); }
+  if(gameMode==='mp' && gameState==='playing' && Object.keys(remotes).length===0) declareWin(); }
 function onCheat(id){ const n=mpNames[id]||'A player'; removeRemote(id);
   pushMpChat(null,'🚫 '+n+' was banned for cheating'); addChat(null,n+' was banned for cheating',true); }
-function showVictory(sub){ const v=$('#victory'); v.querySelector('.vsub').textContent=sub||''; v.classList.add('on');
-  sfx('level'); addXP(50); setTimeout(()=>v.classList.remove('on'),3600); }
+// YOU won the match -> tell everyone, show banner with your username
+function declareWin(){ NET.send({t:'win', name:NET.name}); showWin(NET.name, true); }
+function onWin(id,name){ const nm=name||mpNames[id]||'A player';
+  if(gameMode==='mp' && gameState==='playing') showWin(nm,false);
+  pushMpChat(null,'🏆 '+nm+' WON the match'); addChat(null,nm+' won the match',true); }
+function showWin(name, you){ const v=$('#victory');
+  v.querySelector('.vtitle').innerHTML='🏆 '+esc(name)+' WON!';
+  v.querySelector('.vsub').textContent = you ? 'You won the match — last one standing!' : (name+' won the match');
+  v.classList.add('on'); sfx('level'); if(you) addXP(50); setTimeout(()=>v.classList.remove('on'),4200); }
 $('#leaveBtn').onclick=doLeave;
 $('#invBtn').onclick=openWeaponPanel; $('#wpClose').onclick=closeWeaponPanel;
 $('#weaponPanel').addEventListener('click',e=>{ if(e.target.id==='weaponPanel') closeWeaponPanel(); });

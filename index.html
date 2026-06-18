@@ -310,6 +310,13 @@
   <div class="hint">Earn XP every elimination — ring-outs give the most. Level up for keys, then hit the Armory to unlock new weapons permanently.</div>
 </div>
 
+<!-- banned -->
+<div id="bannedScreen" class="overlay hidden" style="background:radial-gradient(circle at 50% 35%,rgba(70,0,12,.96),rgba(8,2,4,.99))">
+  <div class="title" style="font-size:64px;background:linear-gradient(90deg,#ff2e63,#fff,#ff2e63);-webkit-background-clip:text;background-clip:text;color:transparent">🚫 BANNED</div>
+  <div class="subtitle">Cheating detected</div>
+  <div class="hint" style="max-width:480px;margin-top:24px">Tampering with the game was detected, so this device has been banned. Play fair — no hacks.</div>
+</div>
+
 <script type="importmap">
 { "imports": { "three": "./three.module.js" } }
 </script>
@@ -761,7 +768,7 @@ function makeEnemy(){
   const top=supportTopAt(pick[0],pick[1],0.5,1e9);
   g.position.set(pick[0], top<=-1e8?0:top, pick[1]);
   mapGroup.add(g); shootTargets.push(g);
-  const e={group:g,hp:160,maxhp:160,speed:rnd(2.8,3.9),nextShot:clock.elapsedTime+rnd(1.1,2.2),
+  const e={group:g,hp:160,maxhp:160,speed:rnd(2.5,3.5),nextShot:clock.elapsedTime+rnd(1.3,2.4),
     color:col,legs:[ll,rl],walkT:Math.random()*6,vel:new THREE.Vector3(),airT:0,grounded:true,
     strafe:Math.random()<.5?1:-1,strafeT:0};
   enemies.push(e); return e;
@@ -829,9 +836,9 @@ function updateEnemies(dt){
     // shoot
     const eEye=p.clone().add(eyeOff);
     if(e.grounded && clock.elapsedTime>e.nextShot && eEye.distanceTo(pEye)<62 && hasLOS(eEye,pEye)){
-      e.nextShot=clock.elapsedTime+rnd(1.3,2.3); tracer(eEye,pEye,0xff2e63);
-      const dist=eEye.distanceTo(pEye), chance=Math.max(.2,.72-dist*.015);
-      if(Math.random()<chance && player.alive) hurtPlayer(rnd(6,11));
+      e.nextShot=clock.elapsedTime+rnd(1.5,2.6); tracer(eEye,pEye,0xff2e63);
+      const dist=eEye.distanceTo(pEye), chance=Math.max(.16,.62-dist*.016);
+      if(Math.random()<chance && player.alive) hurtPlayer(rnd(5,9));
     }
   }
 }
@@ -1107,7 +1114,8 @@ function gameOver(){ gameState='over'; firing=false; showLeaveBtn(false); update
   $('#fKills').textContent=kills; $('#fWave').textContent=wave;
   $('#fXP').textContent='+'+xpGainedThisGame; $('#fLevel').textContent=profile.level; $('#fKeys').textContent='+'+keysEarnedThisGame;
   saveProfile(); $('#overScreen').classList.remove('hidden'); }
-function beginGame(){ $('#startScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden'); $('#lobbyScreen').classList.add('hidden');
+function beginGame(){ if(isBanned()){ $('#bannedScreen').classList.remove('hidden'); return; }
+  $('#startScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden'); $('#lobbyScreen').classList.add('hidden');
   leaveMp(); gameMode='solo'; gameState='playing'; resetGame(); showLeaveBtn(true); goFullscreen(); updateRotateHint(); if(!IS_TOUCH) renderer.domElement.requestPointerLock(); }
 function openArmory(){ $('#overScreen').classList.add('hidden'); $('#startScreen').classList.remove('hidden'); gameState='menu'; updateProgUI(); }
 $('#startBtn').onclick=beginGame; $('#restartBtn').onclick=beginGame; $('#armoryBtn').onclick=openArmory;
@@ -1179,15 +1187,31 @@ addEventListener('orientationchange',()=>setTimeout(updateRotateHint,250));
 addEventListener('resize',updateRotateHint);
 function goFullscreen(){ if(COARSE){ try{ (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen||(()=>{})).call(document.documentElement); }catch(e){} } }
 
+// ---------- Anti-cheat ----------
+function isBanned(){ try{ return localStorage.getItem('bloxRivalsBanned')==='1'; }catch(e){ return false; } }
+function banPlayer(){
+  try{ localStorage.setItem('bloxRivalsBanned','1'); }catch(e){}
+  if(gameMode==='mp'){ try{ NET.send({t:'cheat'}); }catch(e){} }
+  gameState='banned'; firing=false; document.exitPointerLock?.(); showLeaveBtn(false);
+  $('#startScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden'); $('#lobbyScreen').classList.add('hidden');
+  $('#bannedScreen').classList.remove('hidden');
+}
+// impossible states (hp above max, ammo above mag) only happen via tampering -> instant ban
+function detectCheat(){
+  if(player.hp > player.maxhp+0.5 || ammo[curWeapon] > weapons[curWeapon].mag+0.5){ banPlayer(); return true; }
+  return false;
+}
+
 // ---------- Loop ----------
 const clock=new THREE.Clock();
 function frame(dt){
   if(gameState==='playing'&&player.alive){
+    if(detectCheat()) return;
     updateMovers(dt); updatePlayer(dt);
     if(gameMode==='mp'){ updateRemotes(dt); netTick(dt);
       document.getElementById('enemyleft').textContent=(1+Object.keys(remotes).length)+' PLAYERS'; }
     else { updateEnemies(dt);
-      if(toSpawn>0){ spawnTimer-=dt; if(spawnTimer<=0&&enemies.length<5){ makeEnemy(); toSpawn--; spawnTimer=rnd(0.9,1.8); } }
+      if(toSpawn>0){ spawnTimer-=dt; if(spawnTimer<=0&&enemies.length<4){ makeEnemy(); toSpawn--; spawnTimer=rnd(1.0,1.9); } }
       if(toSpawn===0&&enemies.length===0){ player.hp=player.maxhp; updateHP(); pushFeed('❤  WAVE CLEARED — HEALTH RESTORED'); startWave(wave+1); }
       document.getElementById('enemyleft').textContent=(enemies.length+toSpawn)+' RIVALS'; }
     updateProjectiles(dt); updateMedkits(dt); updateEffects(dt);
@@ -1242,9 +1266,10 @@ const NET={
       case 'state': onRemoteState(o); break;
       case 'chat': addChat(o.name,o.text); pushMpChat(o.name,o.text); break;
       case 'shot': if(o.from&&o.to) tracer(new THREE.Vector3(o.from[0],o.from[1],o.from[2]),new THREE.Vector3(o.to[0],o.to[1],o.to[2]),o.color||0xffffff); break;
-      case 'hit': if(o.target===this.id) takeMpDamage(o.dmg||10,o.id); break;
+      case 'hit': if(o.target===this.id){ if((o.dmg||0)<=700) takeMpDamage(o.dmg||10,o.id); else onCheat(o.id); } break;
       case 'death': onMpDeath(o.id,o.by); break;
       case 'forfeit': onForfeit(o.id); break;
+      case 'cheat': onCheat(o.id); break;
     } },
   disconnect(){ if(this.ws){ try{ this.send({t:'leave'}); this.ws.close(); }catch(e){} this.ws=null; } this.connected=false; }
 };
@@ -1292,7 +1317,8 @@ function openMpChat(){ if(gameMode!=='mp')return; chatOpen=true; keys['KeyW']=ke
   const i=$('#mpChatInput'); i.classList.add('on'); i.value=''; i.focus(); document.exitPointerLock?.(); }
 function closeMpChat(send){ const i=$('#mpChatInput'); if(send) sendChat(i.value); i.value=''; i.classList.remove('on'); chatOpen=false; }
 // lobby + arena flow
-function startArena(){ $('#lobbyScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden');
+function startArena(){ if(isBanned()){ $('#bannedScreen').classList.remove('hidden'); return; }
+  $('#lobbyScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden');
   gameMode='mp'; gameState='playing'; resetGame();
   document.getElementById('wave').textContent='ARENA';
   document.getElementById('mapname').textContent=MAPS[selectedMap].name+' · MULTIPLAYER';
@@ -1312,6 +1338,8 @@ function doLeave(){ document.exitPointerLock?.(); showLeaveBtn(false); $('#victo
 function onForfeit(id){ const name=mpNames[id]||'A player'; removeRemote(id);
   pushMpChat(null,'🏳 '+name+' forfeited the match');
   if(gameMode==='mp' && gameState==='playing' && Object.keys(remotes).length===0) showVictory(name+' forfeited — last one standing!'); }
+function onCheat(id){ const n=mpNames[id]||'A player'; removeRemote(id);
+  pushMpChat(null,'🚫 '+n+' was banned for cheating'); addChat(null,n+' was banned for cheating',true); }
 function showVictory(sub){ const v=$('#victory'); v.querySelector('.vsub').textContent=sub||''; v.classList.add('on');
   sfx('level'); addXP(50); setTimeout(()=>v.classList.remove('on'),3600); }
 $('#leaveBtn').onclick=doLeave;
@@ -1328,8 +1356,9 @@ $('#chatSend').onclick=()=>{ sendChat($('#chatInput').value); $('#chatInput').va
 $('#chatInput').addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter'){ sendChat($('#chatInput').value); $('#chatInput').value=''; } });
 $('#mpChatInput').addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') closeMpChat(true); else if(e.key==='Escape') closeMpChat(false); });
 
-// debug bridge (deterministic stepping for testing)
-window.RIVALS={ get state(){return gameState;}, get enemies(){return enemies;}, get kills(){return kills;},
+// debug bridge — ONLY on localhost or ?debug, so it can't be used to cheat on the live site
+const DEBUG = location.hostname==='localhost' || location.hostname==='127.0.0.1' || new URLSearchParams(location.search).has('debug');
+if(DEBUG) window.RIVALS={ get state(){return gameState;}, get enemies(){return enemies;}, get kills(){return kills;},
   get wave(){return wave;}, get projectiles(){return projectiles;}, get movers(){return movers;},
   get jumpPads(){return jumpPads;}, player, weapons, ammo, MAPS,
   setMap(i){selectedMap=i;}, begin:beginGame, spawn:makeEnemy, fire:tryFire, selectWeapon,
@@ -1343,6 +1372,7 @@ window.RIVALS={ get state(){return gameState;}, get enemies(){return enemies;}, 
     frame(d); renderFrame();
     return {state:gameState,enemies:enemies.length,toSpawn,kills,hp:Math.round(player.hp),py:+player.pos.y.toFixed(2),proj:projectiles.length}; } };
 
+if(isBanned()) $('#bannedScreen').classList.remove('hidden');
 rebuildLoadout(); buildViewModel(); updateWeaponUI(); updateNadeUI(); updateHP(); updateProgUI(); animate();
 </script>
 </body>

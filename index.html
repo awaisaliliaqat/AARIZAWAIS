@@ -589,13 +589,16 @@ let grenades=3, grenadeMax=3, lastGrenade=-10, lastMelee=-10, meleeAnim=0;
 // ---------- Progression (persistent via localStorage) ----------
 const SAVE_KEY='bloxRivalsProfile_v1';
 let profile=loadProfile();
+// OWNER unlock: open the site with ?unlock=CODE once to grant every gun on THIS device (persists).
+const OWNER_CODE='aariz-owner-7731';
+try{ if(new URLSearchParams(location.search).get('unlock')===OWNER_CODE){
+  profile.unlocked = weapons.map(w=>w.id); saveProfile(); } }catch(e){}
 let xpGainedThisGame=0, keysEarnedThisGame=0;
 function loadProfile(){
-  const ALL = weapons.map(w=>w.id);     // every gun unlocked
   try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY));
     if(s&&Array.isArray(s.unlocked)){ s.level=s.level||1; s.xp=s.xp||0; s.keys=s.keys||0;
-      s.unlocked = ALL.slice(); return s; } }catch(e){}
-  return { level:1, xp:0, keys:0, unlocked: ALL.slice() };
+      if(!s.unlocked.includes('smg')) s.unlocked.push('smg'); return s; } }catch(e){}
+  return { level:1, xp:0, keys:0, unlocked:['smg'] };
 }
 function saveProfile(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(profile)); }catch(e){} }
 function xpNeeded(lvl){ return 80+(lvl-1)*55; }

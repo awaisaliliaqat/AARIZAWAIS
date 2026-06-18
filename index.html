@@ -794,7 +794,7 @@ function unlockWeapon(i){ const w=weapons[i];
 function isArmorOwned(i){ return (profile.armors||[]).includes(armors[i].id); }
 function bestArmorBonus(){ let b=0; armors.forEach((a,i)=>{ if(isArmorOwned(i)&&a.bonus>b) b=a.bonus; }); return b; }
 function bestArmorIndex(){ let bi=-1,bb=-1; armors.forEach((a,i)=>{ if(isArmorOwned(i)&&a.bonus>bb){bb=a.bonus;bi=i;} }); return bi; }
-function playerMaxHp(){ return (gameMode==='mp') ? 500 : (50 + bestArmorBonus()); }  // 500 in multiplayer (equal for all), 50 base in solo (+armor)
+function playerMaxHp(){ return ((gameMode==='mp') ? 500 : 50) + bestArmorBonus(); }  // base 50 solo / 500 mp, plus armor (armor works in both)
 function unlockArmor(i){ const a=armors[i];
   if(isArmorOwned(i)||profile.keys<a.cost) return false;
   profile.keys-=a.cost; (profile.armors=profile.armors||[]).push(a.id); saveProfile(); return true; }

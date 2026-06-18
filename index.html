@@ -165,6 +165,11 @@
     border-radius:22px;background:rgba(0,229,255,.18);color:#fff;text-transform:uppercase;}
   #invBtn:hover{background:rgba(0,229,255,.4);}
   #invBtn.on{display:block;}
+  #viewBtn{position:absolute;left:24px;top:90px;pointer-events:auto;cursor:pointer;display:none;
+    font-size:12px;font-weight:bold;letter-spacing:1px;padding:8px 15px;border:2px solid rgba(176,109,255,.5);
+    border-radius:22px;background:rgba(176,109,255,.22);color:#fff;text-transform:uppercase;}
+  #viewBtn:hover{background:rgba(176,109,255,.45);}
+  #viewBtn.on{display:block;}
   #weaponPanel{position:fixed;inset:0;z-index:18;display:none;align-items:center;justify-content:center;background:rgba(4,7,12,.84);}
   #weaponPanel.on{display:flex;}
   #wpBox{background:rgba(12,18,28,.97);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:20px 22px;
@@ -265,6 +270,7 @@
   <div id="scoreboard"><h4>Scoreboard</h4><div id="sbrows"></div></div>
   <button id="leaveBtn">🏳 LEAVE</button>
   <button id="invBtn">🎒 WEAPONS</button>
+  <button id="viewBtn">🎥 3RD PERSON</button>
   <div id="victory"><div class="vtitle">🏆 YOU WIN!</div><div class="vsub"></div></div>
 </div>
 
@@ -702,6 +708,7 @@ addEventListener('keydown',e=>{
   if(chatOpen) return;                         // chat input has focus — don't drive the game
   if(gameMode==='mp' && gameState==='playing' && (e.code==='KeyT'||e.code==='Enter')){ e.preventDefault(); openMpChat(); return; }
   if(e.code==='KeyQ' && gameState==='playing'){ e.preventDefault(); toggleWeaponPanel(); return; }
+  if(e.code==='KeyP' && gameState==='playing'){ e.preventDefault(); setView(!thirdPerson); return; }
   keys[e.code]=true;
   const ws=WEAPON_KEYS.indexOf(e.code); if(ws>=0){ if(ws<loadout.length){ e.preventDefault(); selectWeapon(loadout[ws]); } }
   if(e.code==='KeyR')reload(); if(e.code==='KeyG')throwGrenade(); if(e.code==='KeyV')melee(); });
@@ -887,7 +894,7 @@ function buildViewModel(){
   muzzleFlash=new THREE.Mesh(new THREE.PlaneGeometry(0.55,0.55),
     new THREE.MeshBasicMaterial({color:0xffe27a,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
   muzzle.add(muzzleFlash);
-  g.position.set(0.24,-0.22,-0.45); g.rotation.y=0.05; viewModel=g; camera.add(g);
+  g.position.set(0.24,-0.22,-0.45); g.rotation.y=0.05; g.visible=!thirdPerson; viewModel=g; camera.add(g);
 }
 
 // ---------- Support / collision ----------
@@ -1142,6 +1149,7 @@ function tryFire(){
   recoilV+=w.recoil; flashMuzzle();
   const origin=new THREE.Vector3(); camera.getWorldPosition(origin);
   const mz=new THREE.Vector3(); if(muzzle)muzzle.getWorldPosition(mz);
+  if(thirdPerson) mz.set(player.pos.x, player.pos.y+1.45, player.pos.z);   // tracers from the body, not the hidden gun
 
   if(w.type==='rocket'){ sfx('shot'); const d=new THREE.Vector3(); camera.getWorldDirection(d); spawnRocket(mz,d,w); return; }
 
@@ -1215,6 +1223,13 @@ function hurtPlayer(d){ player.hp-=d; player.lastHit=clock.elapsedTime; updateHP
 
 // ---------- Player update ----------
 const moveDir=new THREE.Vector3();
+// 3rd-person view
+let thirdPerson=false, playerBody=null; const camRay=new THREE.Raycaster(); const VUP=new THREE.Vector3(0,1,0);
+function setView(third){ thirdPerson=third;
+  if(thirdPerson && !playerBody){ playerBody=avatarMesh(0x4dd2ff); scene.add(playerBody); }
+  if(playerBody) playerBody.visible = thirdPerson && gameState==='playing';
+  if(viewModel) viewModel.visible = !thirdPerson;
+  const b=$('#viewBtn'); if(b) b.textContent = thirdPerson?'🎥 1ST PERSON':'🎥 3RD PERSON'; }
 function updatePlayer(dt){
   // ride moving platform
   if(player.standingOn&&player.standingOn.mover) player.pos.add(player.standingOn.mover.delta);
@@ -1263,7 +1278,19 @@ function updatePlayer(dt){
 
   const bob=(player.onGround&&moveDir.lengthSq()>0)?Math.sin(clock.elapsedTime*(sprint?14:10))*0.045:0;
   let sx=0,sy=0; if(shake>0){ sx=rnd(-1,1)*shake*0.15; sy=rnd(-1,1)*shake*0.15; shake=Math.max(0,shake-dt*2.5); }
-  camera.position.set(player.pos.x+sx, player.pos.y+player.height+bob+sy, player.pos.z);
+  if(thirdPerson){
+    if(playerBody){ playerBody.visible=true; playerBody.position.set(player.pos.x,player.pos.y,player.pos.z); playerBody.rotation.y=player.yaw+Math.PI; }
+    const fwd=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch,player.yaw,0,'YXZ'));
+    const pivot=new THREE.Vector3(player.pos.x, player.pos.y+player.height*0.85, player.pos.z);
+    let dist=3.8; camRay.set(pivot, fwd.clone().negate()); camRay.far=dist+0.4;
+    const ch=camRay.intersectObjects(obstacleMeshes,false); if(ch.length) dist=Math.max(1.0, ch[0].distance-0.35);
+    const right=new THREE.Vector3().crossVectors(fwd,VUP).normalize();
+    camera.position.copy(pivot).addScaledVector(fwd,-dist).addScaledVector(right,0.85).addScaledVector(VUP,0.25);
+    camera.position.x+=sx; camera.position.y+=sy;
+  } else {
+    if(playerBody) playerBody.visible=false;
+    camera.position.set(player.pos.x+sx, player.pos.y+player.height+bob+sy, player.pos.z);
+  }
   if(skyDome&&skyDome.parent) skyDome.position.copy(camera.position);   // sky stays centered on the camera
 
   // viewmodel sway + melee swing
@@ -1527,8 +1554,8 @@ function startArena(){ if(isBanned()){ $('#bannedScreen').classList.remove('hidd
   if(!IS_TOUCH) renderer.domElement.requestPointerLock(); }
 function leaveMp(){ gameMode='solo'; chatOpen=false; $('#mpChatInput').classList.remove('on'); $('#bChat').style.display='none';
   Object.keys(remotes).forEach(removeRemote); $('#scoreboard').classList.remove('on'); $('#mpChat').innerHTML=''; }
-function showLeaveBtn(on){ $('#leaveBtn').classList.toggle('on',on); $('#invBtn').classList.toggle('on',on);
-  if(!on) $('#weaponPanel').classList.remove('on'); }
+function showLeaveBtn(on){ $('#leaveBtn').classList.toggle('on',on); $('#invBtn').classList.toggle('on',on); $('#viewBtn').classList.toggle('on',on);
+  if(!on){ $('#weaponPanel').classList.remove('on'); if(playerBody) playerBody.visible=false; } }
 // in-game LEAVE button: go to lobby/menu; in MP the remaining player(s) win
 function doLeave(){ document.exitPointerLock?.(); showLeaveBtn(false); $('#victory').classList.remove('on'); firing=false;
   if(gameMode==='mp'){ NET.send({t:'forfeit'}); leaveMp(); gameState='menu';
@@ -1551,6 +1578,7 @@ function showWin(name, you){ const v=$('#victory');
   v.classList.add('on'); sfx('level'); if(you) addXP(50); setTimeout(()=>v.classList.remove('on'),4200); }
 $('#leaveBtn').onclick=doLeave;
 $('#invBtn').onclick=openWeaponPanel; $('#wpClose').onclick=closeWeaponPanel;
+$('#viewBtn').onclick=()=>setView(!thirdPerson);
 $('#weaponPanel').addEventListener('click',e=>{ if(e.target.id==='weaponPanel') closeWeaponPanel(); });
 
 $('#mpBtn').onclick=()=>{ $('#startScreen').classList.add('hidden'); $('#lobbyScreen').classList.remove('hidden'); gameState='menu';
@@ -1575,6 +1603,7 @@ if(DEBUG) window.RIVALS={ get state(){return gameState;}, get enemies(){return e
   get profile(){return profile;}, addXP, unlockWeapon, isUnlocked, get curWeapon(){return curWeapon;},
   armors, unlockArmor, isArmorOwned, playerMaxHp, bestArmorBonus,
   get medkits(){return medkits;}, get net(){return NET;}, get remotes(){return remotes;},
+  setView, get thirdPerson(){return thirdPerson;}, get playerBody(){return playerBody;}, get camera(){return camera;},
   get gameMode(){return gameMode;}, get scores(){return mpScores;}, startArena, sendChat, mpRespawn, doLeave,
   get renderer(){return renderer;}, get composer(){return composer;},
   resetProfile(){ profile={level:1,xp:0,keys:0,unlocked:['smg'],armors:[]}; saveProfile(); updateProgUI(); },

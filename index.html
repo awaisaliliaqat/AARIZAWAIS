@@ -153,6 +153,26 @@
   #levelhud{font-size:13px;color:var(--warn);letter-spacing:1px;margin-top:5px;}
   #xpbar{width:130px;height:5px;background:rgba(255,255,255,.15);border-radius:4px;overflow:hidden;margin:3px auto 0;}
   #xphud{height:100%;width:0;background:var(--accent);transition:width .2s;}
+  /* weapon arsenal panel + open button */
+  #invBtn{position:absolute;left:24px;top:52px;pointer-events:auto;cursor:pointer;display:none;
+    font-size:12px;font-weight:bold;letter-spacing:1px;padding:8px 15px;border:2px solid rgba(0,229,255,.4);
+    border-radius:22px;background:rgba(0,229,255,.18);color:#fff;text-transform:uppercase;}
+  #invBtn:hover{background:rgba(0,229,255,.4);}
+  #invBtn.on{display:block;}
+  #weaponPanel{position:fixed;inset:0;z-index:18;display:none;align-items:center;justify-content:center;background:rgba(4,7,12,.84);}
+  #weaponPanel.on{display:flex;}
+  #wpBox{background:rgba(12,18,28,.97);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:20px 22px;
+    width:92vw;max-width:780px;max-height:86vh;overflow:auto;text-align:center;}
+  #wpBox h3{font-size:13px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;}
+  #wpGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:9px;margin:14px 0;}
+  .wpcard{pointer-events:auto;cursor:pointer;border:2px solid rgba(255,255,255,.15);border-radius:10px;padding:9px 10px;
+    background:rgba(255,255,255,.04);text-align:left;transition:transform .08s;}
+  .wpcard:hover{transform:translateY(-2px);}
+  .wpcard.active{border-color:var(--accent);box-shadow:0 0 16px rgba(0,229,255,.45);background:rgba(0,229,255,.1);}
+  .wpcard .wpk{font-size:11px;color:var(--warn);font-weight:bold;}
+  .wpcard .wpn{font-size:13px;font-weight:bold;letter-spacing:.3px;margin:2px 0;}
+  .wpcard .wpd{font-size:11px;opacity:.6;}
+  #bInv{right:226px;bottom:38px;width:58px;height:58px;font-size:22px;}
   /* in-game leave button + victory banner */
   #leaveBtn{position:absolute;left:24px;top:14px;pointer-events:auto;cursor:pointer;display:none;
     font-size:13px;font-weight:bold;letter-spacing:1px;padding:9px 18px;border:2px solid rgba(255,255,255,.28);
@@ -228,7 +248,17 @@
   <input id="mpChatInput" maxlength="160" placeholder="Say something… (Enter to send, Esc to cancel)">
   <div id="scoreboard"><h4>Scoreboard</h4><div id="sbrows"></div></div>
   <button id="leaveBtn">🏳 LEAVE</button>
+  <button id="invBtn">🎒 WEAPONS</button>
   <div id="victory"><div class="vtitle">🏆 YOU WIN!</div><div class="vsub"></div></div>
+</div>
+
+<!-- weapon arsenal panel -->
+<div id="weaponPanel">
+  <div id="wpBox">
+    <h3>🎒 ARSENAL — tap a weapon to equip</h3>
+    <div id="wpGrid"></div>
+    <button id="wpClose" class="btn" style="padding:10px 32px;font-size:15px">✕ CLOSE</button>
+  </div>
 </div>
 
 <!-- mobile controls -->
@@ -240,6 +270,7 @@
   <div class="mbtn" id="bNade">🧨</div>
   <div class="mbtn" id="bReload">RELOAD</div>
   <div class="mbtn" id="bSwap">SWAP</div>
+  <div class="mbtn" id="bInv">🎒</div>
   <div class="mbtn" id="bChat" style="display:none">💬</div>
 </div>
 
@@ -273,7 +304,7 @@
       <b>WASD</b><span>Move</span><b>MOUSE</b><span>Look / aim</span>
       <b>L-CLICK</b><span>Shoot (hold for auto)</span><b>SPACE</b><span>Jump</span>
       <b>SHIFT</b><span>Sprint</span><b>1-9 0 - =</b><span>Switch weapon (or scroll wheel)</span>
-      <b>R</b><span>Reload</span><b>G</b><span>Throw grenade</span><b>V</b><span>Melee knife</span>
+      <b>R</b><span>Reload</span><b>G</b><span>Throw grenade</span><b>V</b><span>Melee knife</span><b>Q</b><span>Weapon panel (see all)</span>
     </div>
   </details>
   <div class="hint">Walk over the glowing <b>🩹 medkits</b> around the map to heal +40 HP. On <b>void maps</b> you can knock rivals off the edge for instant <b>ring-outs</b>. Don't fall off yourself!</div>
@@ -571,6 +602,7 @@ const moveStick={x:0,y:0};
 addEventListener('keydown',e=>{
   if(chatOpen) return;                         // chat input has focus — don't drive the game
   if(gameMode==='mp' && gameState==='playing' && (e.code==='KeyT'||e.code==='Enter')){ e.preventDefault(); openMpChat(); return; }
+  if(e.code==='KeyQ' && gameState==='playing'){ e.preventDefault(); toggleWeaponPanel(); return; }
   keys[e.code]=true;
   const ws=WEAPON_KEYS.indexOf(e.code); if(ws>=0){ if(ws<loadout.length){ e.preventDefault(); selectWeapon(loadout[ws]); } }
   if(e.code==='KeyR')reload(); if(e.code==='KeyG')throwGrenade(); if(e.code==='KeyV')melee(); });
@@ -1037,6 +1069,17 @@ function renderWeaponSlots(){ const el=$('#weapons'); if(!el)return; el.innerHTM
     el.appendChild(d); });
   const act=el.querySelector('.wslot.active');       // keep the equipped weapon scrolled into view
   if(act) el.scrollLeft = act.offsetLeft - el.clientWidth/2 + act.clientWidth/2; }
+// full arsenal panel — shows ALL owned weapons in a grid, tap to equip
+function renderWeaponPanel(){ const g=$('#wpGrid'); if(!g)return; g.innerHTML='';
+  loadout.forEach((wi,slot)=>{ const w=weapons[wi]; const c=document.createElement('div');
+    c.className='wpcard'+(wi===curWeapon?' active':'');
+    c.innerHTML='<div class="wpk">['+(KEY_LABELS[slot]||'•')+']</div><div class="wpn">'+w.name+'</div>'
+      +'<div class="wpd">DMG '+w.dmg+(w.splash?' +'+w.splash:'')+'</div>';
+    c.onclick=()=>{ selectWeapon(wi); closeWeaponPanel(); };
+    g.appendChild(c); }); }
+function openWeaponPanel(){ if(gameState!=='playing')return; renderWeaponPanel(); $('#weaponPanel').classList.add('on'); document.exitPointerLock?.(); }
+function closeWeaponPanel(){ $('#weaponPanel').classList.remove('on'); if(!IS_TOUCH && gameState==='playing') renderer.domElement.requestPointerLock(); }
+function toggleWeaponPanel(){ if($('#weaponPanel').classList.contains('on')) closeWeaponPanel(); else openWeaponPanel(); }
 function updateLevelHUD(){ const l=$('#levelhud'); if(l) l.innerHTML='LVL '+profile.level+'  ·  '+profile.keys+' 🔑';
   const x=$('#xphud'); if(x) x.style.width=Math.min(100,profile.xp/xpNeeded(profile.level)*100)+'%'; }
 function updateWeaponUI(){ const w=weapons[curWeapon];
@@ -1209,7 +1252,7 @@ if(IS_TOUCH){ $('#mobile').classList.add('on');
   btn('#bFire',startFire,releaseFire);
   btn('#bJump',()=>{keys['Space']=true;},()=>{keys['Space']=false;});
   btn('#bMelee',melee); btn('#bNade',throwGrenade); btn('#bReload',reload);
-  btn('#bSwap',()=>cycleWeapon(1)); btn('#bChat',()=>openMpChat());
+  btn('#bSwap',()=>cycleWeapon(1)); btn('#bChat',()=>openMpChat()); btn('#bInv',()=>openWeaponPanel());
   $('#mpChatInput').addEventListener('blur',()=>{ if(chatOpen) closeMpChat(false); }); // dismiss keyboard closes chat
 }
 
@@ -1368,7 +1411,8 @@ function startArena(){ if(isBanned()){ $('#bannedScreen').classList.remove('hidd
   if(!IS_TOUCH) renderer.domElement.requestPointerLock(); }
 function leaveMp(){ gameMode='solo'; chatOpen=false; $('#mpChatInput').classList.remove('on'); $('#bChat').style.display='none';
   Object.keys(remotes).forEach(removeRemote); $('#scoreboard').classList.remove('on'); $('#mpChat').innerHTML=''; }
-function showLeaveBtn(on){ $('#leaveBtn').classList.toggle('on',on); }
+function showLeaveBtn(on){ $('#leaveBtn').classList.toggle('on',on); $('#invBtn').classList.toggle('on',on);
+  if(!on) $('#weaponPanel').classList.remove('on'); }
 // in-game LEAVE button: go to lobby/menu; in MP the remaining player(s) win
 function doLeave(){ document.exitPointerLock?.(); showLeaveBtn(false); $('#victory').classList.remove('on'); firing=false;
   if(gameMode==='mp'){ NET.send({t:'forfeit'}); leaveMp(); gameState='menu';
@@ -1383,6 +1427,8 @@ function onCheat(id){ const n=mpNames[id]||'A player'; removeRemote(id);
 function showVictory(sub){ const v=$('#victory'); v.querySelector('.vsub').textContent=sub||''; v.classList.add('on');
   sfx('level'); addXP(50); setTimeout(()=>v.classList.remove('on'),3600); }
 $('#leaveBtn').onclick=doLeave;
+$('#invBtn').onclick=openWeaponPanel; $('#wpClose').onclick=closeWeaponPanel;
+$('#weaponPanel').addEventListener('click',e=>{ if(e.target.id==='weaponPanel') closeWeaponPanel(); });
 
 $('#mpBtn').onclick=()=>{ $('#startScreen').classList.add('hidden'); $('#lobbyScreen').classList.remove('hidden'); gameState='menu';
   if(!$('#serverUrl').value) $('#serverUrl').value=DEFAULT_WS_URL;

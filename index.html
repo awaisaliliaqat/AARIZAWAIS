@@ -114,8 +114,12 @@
   .tag-void{background:rgba(255,46,99,.2);color:#ff8aa6;}
   .tag-floor{background:rgba(57,255,20,.18);color:#9dff8a;}
 
-  .settings{margin-top:22px;display:flex;align-items:center;gap:12px;font-size:13px;letter-spacing:1px;}
+  .settings{margin-top:18px;display:flex;align-items:center;gap:12px;font-size:13px;letter-spacing:1px;flex-wrap:wrap;justify-content:center;}
   .settings input{accent-color:var(--accent);width:180px;}
+  .qbtn{pointer-events:auto;cursor:pointer;padding:7px 15px;border:2px solid rgba(255,255,255,.2);border-radius:8px;
+    background:rgba(10,16,26,.55);color:#fff;font-weight:bold;font-size:12px;letter-spacing:1px;}
+  .qbtn:hover{border-color:rgba(255,255,255,.4);}
+  .qbtn.qon{border-color:var(--accent);background:rgba(0,229,255,.14);color:var(--accent);}
 
   .btn{pointer-events:auto;cursor:pointer;margin-top:26px;font-size:20px;font-weight:bold;letter-spacing:2px;
     padding:15px 50px;border:none;border-radius:40px;color:#04121a;background:linear-gradient(90deg,var(--accent),#9bfff0);
@@ -297,6 +301,10 @@
   <div class="settings">
     <span>MOUSE SENS</span><input id="sens" type="range" min="1" max="20" value="10"><span id="sensVal">1.0×</span>
   </div>
+  <div class="settings">
+    <span>GRAPHICS</span>
+    <button class="qbtn" data-q="low">LOW (fastest)</button><button class="qbtn" data-q="medium">MEDIUM</button><button class="qbtn" data-q="high">HIGH</button>
+  </div>
   <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center">
     <button class="btn" id="startBtn">► PLAY SOLO</button>
     <button class="btn" id="mpBtn" style="background:linear-gradient(90deg,#b06dff,#e0b0ff);box-shadow:0 8px 30px rgba(176,109,255,.45)">🌐 MULTIPLAYER</button>
@@ -381,11 +389,19 @@ import { RoomEnvironment } from './jsm/environments/RoomEnvironment.js';
 
 // ---------- Core ----------
 const COARSE = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;   // mobile / touch
-const renderer = new THREE.WebGLRenderer({ antialias:!COARSE, powerPreference:'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, COARSE?1.5:2));
+// graphics quality (saved): low / medium / high. Default light so it runs smooth.
+let QUALITY; try{ QUALITY = localStorage.getItem('bloxRivalsQuality'); }catch(e){}
+if(QUALITY!=='low' && QUALITY!=='medium' && QUALITY!=='high') QUALITY = COARSE ? 'low' : 'medium';
+const Q_HIGH = QUALITY==='high', Q_LOW = QUALITY==='low';
+const Q_SAMPLES = (COARSE||Q_LOW) ? 0 : (Q_HIGH ? 4 : 2);     // composer MSAA
+const Q_AO    = Q_HIGH && !COARSE;                            // GTAO only on High desktop (heaviest)
+const Q_SMAA  = !Q_LOW;                                        // SMAA off on Low
+const Q_DPR   = Q_LOW ? 1 : (COARSE ? 1.5 : (Q_HIGH ? 2 : 1.6));
+const renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, Q_DPR));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = Q_LOW ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -403,20 +419,20 @@ scene.environmentIntensity = 0.55;
 scene.add(new THREE.HemisphereLight(0xdce9ff, 0x3a4250, 1.0));
 const sun = new THREE.DirectionalLight(0xfff2dc, 2.2);
 sun.position.set(45,80,30); sun.castShadow = true;
-sun.shadow.mapSize.set(COARSE?1024:2048, COARSE?1024:2048);
+{ const sm=(Q_LOW||COARSE)?1024:2048; sun.shadow.mapSize.set(sm,sm); }
 const sc = sun.shadow.camera; sc.left=-90;sc.right=90;sc.top=90;sc.bottom=-90;sc.near=1;sc.far=280;
 sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.02; scene.add(sun);
 const rim = new THREE.DirectionalLight(0x88bbff, 0.6); rim.position.set(-40,30,-30); scene.add(rim);
 
 // ---------- Post-processing : Render -> AO -> Bloom -> Grade -> SMAA -> Output ----------
 // multisampled HalfFloat RT so MSAA survives the bloom path (desktop); samples 0 on mobile
-const composerRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type:THREE.HalfFloatType, samples: COARSE?0:4 });
+const composerRT = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type:THREE.HalfFloatType, samples: Q_SAMPLES });
 const composer = new EffectComposer(renderer, composerRT);
 composer.addPass(new RenderPass(scene, camera));
 
-// ground-truth ambient occlusion (desktop only) — grounds objects with contact shadows
+// ground-truth ambient occlusion (High desktop only — heaviest effect)
 let aoPass = null;
-if(!COARSE){
+if(Q_AO){
   aoPass = new GTAOPass(scene, camera, innerWidth, innerHeight);
   aoPass.output = GTAOPass.OUTPUT.Default;
   aoPass.blendIntensity = 0.9;
@@ -445,8 +461,8 @@ const GradeShader = {
 const grade = new ShaderPass(GradeShader);
 composer.addPass(grade);
 
-const smaa = new SMAAPass(innerWidth, innerHeight);
-composer.addPass(smaa);
+const smaa = Q_SMAA ? new SMAAPass(innerWidth, innerHeight) : null;
+if(smaa) composer.addPass(smaa);
 
 composer.addPass(new OutputPass());   // LAST: final tone map + sRGB encode
 function renderFrame(){ composer.render(); }
@@ -604,8 +620,8 @@ function buildMap(def){
   buildMedkits(def);
   // colored accent lights for mood (echo the neon HUD); never cast shadows (perf)
   const accentL=(c,x,y,z,i,d)=>{ const l=new THREE.PointLight(c,i,d,2); l.position.set(x,y,z); l.castShadow=false; mapGroup.add(l); };
-  accentL(0x00e5ff,-18,4,-18,COARSE?5:9,30); accentL(0xff2e63,18,4,18,COARSE?5:9,30);
-  if(!COARSE) accentL(0xffd23f,0,7,0,6,26);
+  if(!Q_LOW){ accentL(0x00e5ff,-18,4,-18,COARSE?5:9,30); accentL(0xff2e63,18,4,18,COARSE?5:9,30);
+    if(!COARSE) accentL(0xffd23f,0,7,0,6,26); }
   if(aoPass) aoPass.blendIntensity = (def.void==null)?0.9:0.55;   // gentler AO on void maps
 }
 
@@ -670,7 +686,7 @@ addEventListener('mousemove',e=>{ if(!locked)return;
 document.addEventListener('pointerlockchange',()=> locked=(document.pointerLockElement===renderer.domElement));
 addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); bloom.setSize(innerWidth,innerHeight);
-  if(aoPass) aoPass.setSize(innerWidth,innerHeight); smaa.setSize(innerWidth,innerHeight); });
+  if(aoPass) aoPass.setSize(innerWidth,innerHeight); if(smaa) smaa.setSize(innerWidth,innerHeight); });
 
 function startFire(){ firing=true; if(gameState==='playing'&&!weapons[curWeapon].auto) tryFire(); }
 function releaseFire(){ firing=false; }
@@ -1263,6 +1279,8 @@ MAPS.forEach((m,i)=>{ const c=document.createElement('div'); c.className='mapcar
   c.onclick=()=>{ selectedMap=i; document.querySelectorAll('.mapcard').forEach(x=>x.classList.remove('sel')); c.classList.add('sel'); };
   mapsEl.appendChild(c); });
 $('#sens').oninput=e=>{ const v=+e.target.value; sens=0.00022*v; $('#sensVal').textContent=(v/10).toFixed(1)+'×'; };
+document.querySelectorAll('.qbtn').forEach(b=>{ if(b.dataset.q===QUALITY) b.classList.add('qon');
+  b.onclick=()=>{ try{ localStorage.setItem('bloxRivalsQuality', b.dataset.q); }catch(e){} location.reload(); }; });
 
 // armory + progression UI
 function renderArmory(){ const el=$('#armory'); if(!el)return; el.innerHTML='';

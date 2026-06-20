@@ -748,7 +748,8 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyP' && gameState==='playing'){ e.preventDefault(); setView(!thirdPerson); return; }
   keys[e.code]=true;
   const ws=WEAPON_KEYS.indexOf(e.code); if(ws>=0){ if(ws<loadout.length){ e.preventDefault(); selectWeapon(loadout[ws]); } }
-  if(e.code==='KeyR')reload(); if(e.code==='KeyG')throwGrenade(); if(e.code==='KeyV')melee(); });
+  if(e.code==='KeyR')reload(); if(e.code==='KeyG')throwGrenade(); if(e.code==='KeyV')melee();
+  if(e.code==='KeyF' && profile && profile.owner && gameState==='playing'){ e.preventDefault(); selectWeapon(weapons.findIndex(w=>w.id==='ownergod')); } });
 addEventListener('keyup',e=> keys[e.code]=false);
 addEventListener('mousedown',e=>{ if(e.button===0) startFire(); });
 addEventListener('mouseup',  e=>{ if(e.button===0) releaseFire(); });
@@ -1087,6 +1088,14 @@ function updateEnemies(dt){
       e.vel.x*=(1-0.4*dt); e.vel.z*=(1-0.4*dt);
     }
     e.group.rotation.y=Math.atan2(player.pos.x-p.x,player.pos.z-p.z);
+
+    // keep enemies inside the walls — strong knockback can punch them clean past a wall;
+    // once outside they can't walk back and the wave would never clear (game freeze).
+    if(currentMap && currentMap.walls){ const B=42.5;
+      if(p.x>B){p.x=B; e.vel.x=Math.min(e.vel.x,0);} else if(p.x<-B){p.x=-B; e.vel.x=Math.max(e.vel.x,0);}
+      if(p.z>B){p.z=B; e.vel.z=Math.min(e.vel.z,0);} else if(p.z<-B){p.z=-B; e.vel.z=Math.max(e.vel.z,0);} }
+    // safety net: if an enemy ever ends up far out of the world, eliminate it so the wave can finish.
+    if(Math.abs(p.x)>90 || Math.abs(p.z)>90 || p.y<-400){ killEnemy(e,false, killY!=null); continue; }
 
     // ring-out
     if(killY!=null && p.y<killY){ killEnemy(e,false,true); continue; }

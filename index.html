@@ -223,8 +223,10 @@
     background:rgba(10,16,26,.5);color:#fff;font-weight:bold;letter-spacing:1px;font-size:13px;}
   .atab.aon{border-color:var(--accent);background:rgba(0,229,255,.12);color:var(--accent);}
   #authMsg{min-height:18px;font-size:13px;color:var(--accent2);margin:2px 0 10px;letter-spacing:.4px;}
-  #userBar{font-size:13px;opacity:.85;margin-top:8px;letter-spacing:1px;}
-  #userBar a{color:var(--accent2);cursor:pointer;pointer-events:auto;text-decoration:underline;}
+  #userBar{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:10px;letter-spacing:1px;}
+  #userTag{font-size:20px;font-weight:800;letter-spacing:.04em;color:#fff;}
+  #userLevelBadge{font-size:13px;font-weight:800;letter-spacing:.06em;color:#3a2a00;background:linear-gradient(90deg,#ffd23f,#ffe98a);padding:5px 13px;border-radius:999px;box-shadow:0 4px 14px rgba(255,210,63,.38);}
+  #userBar a{color:var(--accent2);cursor:pointer;pointer-events:auto;text-decoration:underline;opacity:.75;font-size:12px;}
   /* multiplayer lobby + chat */
   .field{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:8px 0;width:320px;max-width:90vw;text-align:left;}
   .field label{font-size:11px;letter-spacing:2px;opacity:.7;text-transform:uppercase;}
@@ -337,7 +339,11 @@
 <div id="startScreen" class="overlay">
   <div class="title">BLOX RIVALS</div>
   <div class="subtitle">Arena FPS · Ring-Out</div>
-  <div id="userBar"><span id="userTag"></span> · <a id="logoutBtn">log out</a></div>
+  <div id="userBar">
+    <span id="userTag"></span>
+    <span id="userLevelBadge">⭐ LEVEL <b id="pLevelTop">1</b></span>
+    <a id="logoutBtn">log out</a>
+  </div>
   <div id="prog">
     <div class="progrow"><span>LEVEL <b id="pLevel">1</b></span><span>❤ <b id="pMaxHp">500</b> MP&nbsp;HP</span><span><b id="pKeys">0</b> 🔑 KEYS</span></div>
     <div id="pXPbar"><div id="pXPfill"></div></div>
@@ -1485,7 +1491,8 @@ function renderArmorShop(){ const el=$('#armorShop'); if(!el)return; el.innerHTM
     if(owned && i!==best){ ub.onclick=()=>{ equipArmor(i); sfx('reload'); updateProgUI(); }; }       // equip an owned armor
     else if(!owned && profile.keys>=a.cost){ ub.onclick=()=>{ if(unlockArmor(i)){ sfx('level'); updateProgUI(); } }; }
     el.appendChild(card); }); }
-function updateProgUI(){ if($('#pLevel')){ $('#pLevel').textContent=profile.level; $('#pKeys').textContent=profile.keys;
+function updateProgUI(){ if($('#pLevelTop')) $('#pLevelTop').textContent=profile.level;
+  if($('#pLevel')){ $('#pLevel').textContent=profile.level; $('#pKeys').textContent=profile.keys;
     if($('#pMaxHp')) $('#pMaxHp').textContent=(500+bestArmorBonus());   // armor only applies in multiplayer
     $('#pXPfill').style.width=Math.min(100,profile.xp/xpNeeded(profile.level)*100)+'%';
     $('#pXPtext').textContent=profile.xp+' / '+xpNeeded(profile.level)+' XP'; }

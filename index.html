@@ -805,6 +805,10 @@ const weapons=[
  {id:'photon',name:'PHOTON RIFLE',cost:600,blurb:'Hyper-fast precision energy beams',type:'hitscan',dmg:74,rpm:680,auto:true,mag:45,reload:2.0,spread:0.006,pellets:1,range:210,recoil:.012,color:0x00ffea,knock:4},
  {id:'apocalypse',name:'APOCALYPSE',cost:1000,blurb:'Colossal nuke blast — flattens everything',type:'rocket',dmg:420,rpm:34,auto:false,mag:2,reload:3.5,range:210,recoil:.1,color:0xff2e63,speed:44,radius:14,splash:190,knock:42},
  {id:'cataclysm',name:'CATACLYSM',cost:1800,blurb:'1000 damage + a SUPER-MASSIVE explosion',type:'rocket',dmg:1000,rpm:24,auto:false,mag:1,reload:4.2,range:220,recoil:.13,color:0xff8a00,speed:46,radius:26,splash:700,knock:70},
+ {id:'pulsar',name:'PULSAR SMG',cost:320,blurb:'Hyper-fast SMG — a wall of bullets',type:'hitscan',dmg:32,rpm:880,auto:true,mag:45,reload:1.8,spread:0.02,pellets:1,range:150,recoil:.011,color:0x6df0ff,knock:2},
+ {id:'stormbringer',name:'STORMBRINGER',cost:780,blurb:'Full-auto energy lance — shreds at range',type:'hitscan',dmg:130,rpm:520,auto:true,mag:35,reload:2.2,spread:0.009,pellets:1,range:240,recoil:.014,color:0x39ff14,knock:8},
+ {id:'reaper',name:'REAPER',cost:950,blurb:'Heavy marksman — one-shots almost anything',type:'hitscan',dmg:480,rpm:40,auto:false,mag:5,reload:2.4,spread:0,pellets:1,range:430,recoil:.08,color:0x9b6dff,knock:22},
+ {id:'devastator',name:'DEVASTATOR',cost:1100,blurb:'Heavy launcher — enormous splash',type:'rocket',dmg:600,rpm:36,auto:false,mag:2,reload:3.4,range:215,recoil:.11,color:0xff5a1f,speed:46,radius:16,splash:340,knock:52},
  {id:'ownergod',name:'ONE SHOT OWNER',cost:0,ownerOnly:true,blurb:'👑 OWNER-ONLY — one-shot minigun · 500 ammo · free',type:'hitscan',dmg:676767,rpm:1150,auto:true,mag:500,reload:2.0,spread:0.025,pellets:1,range:600,recoil:.015,color:0xffd23f,knock:45},
 ];
 
@@ -903,8 +907,8 @@ function addXP(n){ profile.xp+=n; xpGainedThisGame+=n;
   saveProfile(); updateLevelHUD(); }
 let loadout=[];   // indices of owned weapons, in weapon order
 // top number row maps to weapon slots 1..12  (1-9, 0, -, =)
-const WEAPON_KEYS=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal','KeyZ','KeyX','KeyC','KeyB','KeyN','KeyM','Comma','Period','Slash','Backslash','BracketLeft','BracketRight','Semicolon','Quote'];
-const KEY_LABELS=['1','2','3','4','5','6','7','8','9','0','-','=','Z','X','C','B','N','M',',','.','/','\\','[',']',';',"'"];
+const WEAPON_KEYS=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Minus','Equal','KeyZ','KeyX','KeyC','KeyB','KeyN','KeyM','Comma','Period','Slash','Backslash','BracketLeft','BracketRight','Semicolon','Quote','KeyH','KeyJ','KeyK','KeyL'];
+const KEY_LABELS=['1','2','3','4','5','6','7','8','9','0','-','=','Z','X','C','B','N','M',',','.','/','\\','[',']',';',"'",'H','J','K','L'];
 function rebuildLoadout(){ loadout=weapons.map((w,i)=>i).filter(isUnlocked); }
 function cycleWeapon(dir){ if(!loadout.length)return; let pos=loadout.indexOf(curWeapon);
   pos=(pos+dir+loadout.length)%loadout.length; selectWeapon(loadout[pos]); }
@@ -941,7 +945,7 @@ function buildViewModel(){
   const PISTOL=(id==='revolver'||id==='deagle');
   const HEAVY=(id==='minigun'||id==='gatling'||id==='inferno'||id==='ownergod');
   const LONG=(id==='sniper'||id==='railgun'||id==='crossbow'||id==='gauss'||id==='antimatter');
-  const LAUNCH=(id==='rocket'||id==='bfg'||id==='meteor'||id==='singularity'||id==='gl'||id==='apocalypse'||id==='cataclysm');
+  const LAUNCH=(id==='rocket'||id==='bfg'||id==='meteor'||id==='singularity'||id==='gl'||id==='apocalypse'||id==='cataclysm'||id==='devastator');
 
   // shared grip + trigger guard
   box(0.12,0.30,0.14, 0,-0.20,0.05, poly);

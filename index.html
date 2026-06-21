@@ -387,24 +387,53 @@
 
 <!-- multiplayer lobby -->
 <div id="lobbyScreen" class="overlay hidden">
-  <div class="title" style="font-size:46px">LOBBY</div>
-  <div class="subtitle">Play & chat with real people</div>
-  <div class="field"><label>Server URL</label><input id="serverUrl" placeholder="wss://your-server.example/ws" autocomplete="off"></div>
+  <div class="title" style="font-size:46px">MULTIPLAYER</div>
+  <div class="subtitle">Play with friends — just share a link</div>
   <div class="field"><label>Your name</label><input id="playerName" maxlength="14" placeholder="Player" autocomplete="off"></div>
-  <div class="field"><label>Room code</label><input id="roomCode" maxlength="16" placeholder="lobby1" autocomplete="off"></div>
+
+  <!-- pick host (the join card auto-appears when you open a friend's invite link) -->
+  <div id="mpChoose" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:4px">
+    <button class="btn" id="hostBtn" style="padding:15px 32px;font-size:18px">🎮 HOST A GAME</button>
+  </div>
+
+  <!-- invite card: appears when you open someone's link -->
+  <div id="joinCard" style="display:none;margin-top:8px;text-align:center">
+    <div id="joinInfo" class="hint" style="font-size:16px;margin:6px auto"></div>
+    <button class="btn" id="joinBtn" style="padding:15px 38px;font-size:19px;background:linear-gradient(90deg,#39ff14,#9dff7a);color:#063a00">✅ JOIN THE MATCH</button>
+  </div>
+
+  <!-- host share card: appears after you tap HOST -->
+  <div id="hostCard" style="display:none;margin-top:8px">
+    <div class="hint" style="font-size:15px;margin:4px auto">Send this link to your friends. When they open it and tap <b>JOIN</b>, they drop into your match.</div>
+    <div class="field"><label>Your invite link</label><input id="inviteLink" readonly onclick="this.select()"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+      <button class="btn" id="copyLinkBtn" style="padding:11px 24px;font-size:15px">📋 COPY LINK</button>
+      <button class="btn" id="shareLinkBtn" style="padding:11px 24px;font-size:15px;display:none">📤 SHARE</button>
+    </div>
+  </div>
+
   <div id="netStatus"></div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
-    <button class="btn" id="connectBtn" style="padding:13px 36px;font-size:17px">CONNECT</button>
-    <button class="btn" id="enterArenaBtn" style="padding:13px 36px;font-size:17px;display:none">⚔ ENTER ARENA</button>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px">
+    <button class="btn" id="startMatchBtn" style="padding:13px 38px;font-size:18px;display:none">⚔ START MATCH</button>
     <button class="btn danger" id="lobbyBackBtn" style="padding:13px 30px;font-size:15px">BACK</button>
   </div>
+
   <div id="lobbyBody">
-    <div id="playerList"><h4>Players</h4><div id="plrows"></div></div>
+    <div id="playerList"><h4>Players in your party</h4><div id="plrows"></div></div>
     <div id="chatWrap"><div id="chatLog"></div>
       <div id="chatRow"><input id="chatInput" maxlength="160" placeholder="Type a message…" autocomplete="off"><button id="chatSend">SEND</button></div>
     </div>
   </div>
-  <div class="hint">Share the <b>Server URL</b> + <b>Room code</b> with friends — everyone who connects to the same room plays together. Press <b>T</b> or <b>Enter</b> in the arena to chat.</div>
+
+  <div class="hint">The <b>host</b> picks a map on the menu, shares the link, then taps <b>START MATCH</b> — everyone jumps in together. Press <b>T</b> or <b>Enter</b> in the arena to chat.</div>
+
+  <details class="help" id="advMp" style="max-width:340px"><summary>Advanced: custom server (optional)</summary>
+    <div class="field"><label>Server URL (wss://…)</label><input id="serverUrl" placeholder="wss://your-server.example/ws" autocomplete="off"></div>
+    <div class="field"><label>Room code</label><input id="roomCode" maxlength="16" placeholder="lobby1" autocomplete="off"></div>
+    <button class="btn" id="connectBtn" style="padding:10px 26px;font-size:14px">CONNECT</button>
+    <button class="btn" id="enterArenaBtn" style="padding:10px 26px;font-size:14px;display:none">⚔ ENTER ARENA</button>
+  </details>
 </div>
 
 <!-- game over -->
@@ -431,6 +460,8 @@
   <div class="hint" style="max-width:480px;margin-top:24px">Tampering with the game was detected, so this device has been banned. Play fair — no hacks.</div>
 </div>
 
+<!-- PeerJS: browser-to-browser (WebRTC) so friends connect via a shared link, no server to run -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
 { "imports": { "three": "./three.module.js" } }
 </script>
@@ -1610,8 +1641,11 @@ function avatarMesh(color){
   return g;
 }
 const NET={
-  ws:null, id:'p'+Math.floor(Math.random()*1e9).toString(36), name:'Player', color:0x4dd2ff, room:'', connected:false, outLog:[],
-  connect(url,room,name){ this.room=room; this.name=name; this.color=PLAYER_COLORS[Math.floor(Math.random()*PLAYER_COLORS.length)];
+  ws:null, peer:null, conns:[], host:null, mode:null,
+  id:'p'+Math.floor(Math.random()*1e9).toString(36), name:'Player', color:0x4dd2ff, room:'', connected:false, outLog:[],
+
+  // ---- WebSocket relay (Advanced: custom server) ----
+  connect(url,room,name){ this.mode='ws'; this.room=room; this.name=name; this.color=PLAYER_COLORS[Math.floor(Math.random()*PLAYER_COLORS.length)];
     setNetStatus('Connecting…','wait');
     try{ this.ws=new WebSocket(url); }catch(e){ setNetStatus('Invalid URL: '+e.message,'err'); return; }
     this.ws.onopen=()=>{ this.connected=true; setNetStatus('Connected ✓ — share the room code with friends!','ok');
@@ -1619,13 +1653,52 @@ const NET={
     this.ws.onclose=()=>{ this.connected=false; setNetStatus('Disconnected','err'); $('#enterArenaBtn').style.display='none'; };
     this.ws.onerror=()=>{ setNetStatus('Connection error — check the server URL','err'); };
     this.ws.onmessage=ev=>{ let o; try{o=JSON.parse(ev.data);}catch(e){return;} this.handleMsg(o); }; },
-  send(o){ o.id=this.id; o.room=this.room; this.outLog.push(o); if(this.outLog.length>60)this.outLog.shift();
-    if(this.ws&&this.ws.readyState===1){ try{ this.ws.send(JSON.stringify(o)); }catch(e){} } },
+
+  // ---- P2P HOST: this browser is the hub and relays between all guests ----
+  startHost(name){ if(typeof Peer==='undefined'){ setNetStatus('Could not load multiplayer — check your internet and retry.','err'); return; }
+    this.mode='host'; this.name=name; this.color=PLAYER_COLORS[Math.floor(Math.random()*PLAYER_COLORS.length)]; this.conns=[];
+    const code='blox'+Math.floor(Math.random()*1e8).toString(36).slice(0,6);
+    setNetStatus('Creating your game…','wait');
+    try{ this.peer=new Peer(code,{debug:0}); }catch(e){ setNetStatus('Could not start hosting: '+e.message,'err'); return; }
+    this.peer.on('open',pid=>{ this.connected=true; this.room=pid; onHostReady(pid); });
+    this.peer.on('connection',conn=>this._wireGuest(conn));
+    this.peer.on('error',err=>{ const t=err&&err.type;
+      if(t==='unavailable-id'){ try{this.peer.destroy();}catch(e){} this.startHost(name); }
+      else setNetStatus('Host error: '+(t||err),'err'); }); },
+  _wireGuest(conn){ const self=this;
+    conn.on('open',()=>{ self.conns.push(conn); renderLobbyPlayers(); });
+    conn.on('data',s=>{ let o; try{o=JSON.parse(s);}catch(e){return;}
+      self._broadcast(s,conn);   // relay raw to every OTHER guest (keeps original sender id)
+      self.handleMsg(o); });     // host also processes locally
+    conn.on('close',()=>{ const i=self.conns.indexOf(conn); if(i>=0)self.conns.splice(i,1);
+      if(conn.peer){ removeRemote('p'+conn.peer); } renderLobbyPlayers(); }); },
+  _broadcast(s,except){ for(const c of this.conns){ if(c!==except && c.open){ try{c.send(s);}catch(e){} } } },
+
+  // ---- P2P GUEST: connect to one host via the invite link ----
+  startJoin(hostId,name){ if(typeof Peer==='undefined'){ setNetStatus('Could not load multiplayer — check your internet and retry.','err'); return; }
+    this.mode='join'; this.name=name; this.color=PLAYER_COLORS[Math.floor(Math.random()*PLAYER_COLORS.length)]; this.room=hostId;
+    setNetStatus('Connecting to the host…','wait');
+    try{ this.peer=new Peer({debug:0}); }catch(e){ setNetStatus('Could not connect: '+e.message,'err'); return; }
+    this.peer.on('open',()=>{ const conn=this.peer.connect(hostId,{reliable:false}); this.host=conn;
+      conn.on('open',()=>{ this.connected=true; setNetStatus('Connected ✓ — waiting for the host to start the match…','ok');
+        this.send({t:'join',name:this.name,color:this.color}); onGuestReady(); });
+      conn.on('data',s=>{ let o; try{o=JSON.parse(s);}catch(e){return;} this.handleMsg(o); });
+      conn.on('close',()=>{ this.connected=false; setNetStatus('The host left or the connection dropped.','err'); }); });
+    this.peer.on('error',err=>{ const t=err&&err.type;
+      setNetStatus(t==='peer-unavailable' ? 'Game not found — ask your friend for a fresh link.' : 'Connection error: '+(t||err),'err'); }); },
+
+  send(o){ o.id=this.id; if(this.room)o.room=this.room; this.outLog.push(o); if(this.outLog.length>60)this.outLog.shift();
+    const s=JSON.stringify(o);
+    if(this.mode==='ws'){ if(this.ws&&this.ws.readyState===1){ try{ this.ws.send(s); }catch(e){} } }
+    else if(this.mode==='host'){ this._broadcast(s,null); }
+    else if(this.mode==='join'){ if(this.host&&this.host.open){ try{ this.host.send(s); }catch(e){} } } },
   _recv(o){ this.handleMsg(o); },     // test hook for simulated inbound
   handleMsg(o){ if(!o||o.id===this.id)return;
     switch(o.t){
-      case 'join': addRemote(o.id,o.name,o.color); if(!o.reply) this.send({t:'join',name:this.name,color:this.color,reply:true}); addChat(null,(o.name||'A player')+' joined',true); break;
-      case 'leave': addChat(null,(mpNames[o.id]||'A player')+' left',true); removeRemote(o.id); break;
+      case 'join': addRemote(o.id,o.name,o.color); if(!o.reply) this.send({t:'join',name:this.name,color:this.color,reply:true});
+        if(this.mode==='host' && gameState==='playing') this.send({t:'start',map:selectedMap});   // late joiner -> pull into the running match
+        addChat(null,(o.name||'A player')+' joined',true); renderLobbyPlayers(); break;
+      case 'leave': addChat(null,(mpNames[o.id]||'A player')+' left',true); removeRemote(o.id); renderLobbyPlayers(); break;
       case 'state': onRemoteState(o); break;
       case 'chat': addChat(o.name,o.text); pushMpChat(o.name,o.text); break;
       case 'shot': if(o.from&&o.to) tracer(new THREE.Vector3(o.from[0],o.from[1],o.from[2]),new THREE.Vector3(o.to[0],o.to[1],o.to[2]),o.color||0xffffff); break;
@@ -1634,10 +1707,17 @@ const NET={
       case 'forfeit': onForfeit(o.id); break;
       case 'cheat': onCheat(o.id); break;
       case 'win': onWin(o.id,o.name); break;
+      case 'start': if(typeof o.map==='number') selectedMap=o.map; if(gameState!=='playing') startArena(); break;
     } },
-  disconnect(){ if(this.ws){ try{ this.send({t:'leave'}); this.ws.close(); }catch(e){} this.ws=null; } this.connected=false; }
+  disconnect(){ try{ this.send({t:'leave'}); }catch(e){}
+    if(this.ws){ try{ this.ws.close(); }catch(e){} this.ws=null; }
+    if(this.host){ try{ this.host.close(); }catch(e){} this.host=null; }
+    if(this.conns&&this.conns.length){ this.conns.forEach(c=>{ try{c.close();}catch(e){} }); this.conns=[]; }
+    if(this.peer){ try{ this.peer.destroy(); }catch(e){} this.peer=null; }
+    this.connected=false; this.mode=null; }
 };
-function setNetStatus(t,cls){ const el=$('#netStatus'); if(el){ el.textContent=t; el.className=cls||''; } }
+function setNetStatus(t,cls){ const el=$('#netStatus'); if(el){ el.textContent=t; el.className=cls||''; }
+  if(cls==='err'){ const hb=$('#hostBtn'),jb=$('#joinBtn'); if(hb)hb.disabled=false; if(jb)jb.disabled=false; } }
 function addRemote(id,name,color){ if(remotes[id])return; mpNames[id]=name||'Player'; if(!(id in mpScores))mpScores[id]=0;
   const g=avatarMesh(color||0x888888); g.userData.remoteId=id; scene.add(g);
   if(!shootTargets.includes(g)) shootTargets.push(g);
@@ -1719,11 +1799,37 @@ $('#invBtn').onclick=openWeaponPanel; $('#wpClose').onclick=closeWeaponPanel;
 $('#viewBtn').onclick=()=>setView(!thirdPerson);
 $('#weaponPanel').addEventListener('click',e=>{ if(e.target.id==='weaponPanel') closeWeaponPanel(); });
 
-$('#mpBtn').onclick=()=>{ $('#startScreen').classList.add('hidden'); $('#lobbyScreen').classList.remove('hidden'); gameState='menu';
-  if(!$('#serverUrl').value) $('#serverUrl').value=DEFAULT_WS_URL;
-  if(!$('#playerName').value) $('#playerName').value='Player'+Math.floor(Math.random()*1000);
-  if(!$('#roomCode').value) $('#roomCode').value='lobby1'; };
-$('#lobbyBackBtn').onclick=()=>{ NET.disconnect(); leaveMp(); $('#lobbyScreen').classList.add('hidden'); $('#startScreen').classList.remove('hidden'); };
+let pendingJoinId=null; try{ pendingJoinId=new URLSearchParams(location.search).get('join'); }catch(e){}
+function resetLobbyCards(){ $('#mpChoose').style.display='flex'; $('#hostCard').style.display='none'; $('#joinCard').style.display='none';
+  $('#startMatchBtn').style.display='none'; $('#hostBtn').disabled=false; $('#joinBtn').disabled=false; setNetStatus('',''); }
+function openLobby(joinMode){ $('#startScreen').classList.add('hidden'); $('#authScreen').classList.add('hidden');
+  $('#lobbyScreen').classList.remove('hidden'); gameState='menu';
+  if(!$('#playerName').value) $('#playerName').value=(currentUser||('Player'+Math.floor(Math.random()*1000))).slice(0,14);
+  resetLobbyCards();
+  if(joinMode && pendingJoinId){ $('#mpChoose').style.display='none'; $('#joinCard').style.display='block';
+    $('#joinInfo').innerHTML='🎮 A friend invited you to their match!<br>Tap <b>JOIN</b> to drop in.'; } }
+function maybeAutoJoin(){ if(pendingJoinId) openLobby(true); }
+function renderLobbyPlayers(){ const el=$('#plrows'); if(!el)return;
+  const rowHtml=n=>'<div style="padding:5px 2px;border-bottom:1px solid rgba(255,255,255,.08)">'+esc(n)+'</div>';
+  const you=(NET.name||'You')+' (you)'+(NET.mode==='host'?' · host':'');
+  el.innerHTML=[rowHtml(you)].concat(Object.keys(remotes).map(id=>rowHtml(mpNames[id]||'Player'))).join(''); }
+function onHostReady(pid){ const link=location.origin+location.pathname+'?join='+pid;
+  $('#mpChoose').style.display='none'; $('#hostCard').style.display='block'; $('#inviteLink').value=link;
+  $('#startMatchBtn').style.display=''; if(navigator.share) $('#shareLinkBtn').style.display='';
+  setNetStatus('Your game is ready ✓ — share the link, then tap START MATCH.','ok'); renderLobbyPlayers(); }
+function onGuestReady(){ $('#joinCard').style.display='none'; $('#mpChoose').style.display='none'; renderLobbyPlayers(); }
+
+$('#mpBtn').onclick=()=>openLobby(false);
+$('#hostBtn').onclick=()=>{ NET.name=($('#playerName').value.trim()||'Player').slice(0,14); $('#hostBtn').disabled=true; NET.startHost(NET.name); };
+$('#joinBtn').onclick=()=>{ if(!pendingJoinId){ setNetStatus('No invite link found.','err'); return; }
+  NET.name=($('#playerName').value.trim()||'Player').slice(0,14); $('#joinBtn').disabled=true; NET.startJoin(pendingJoinId,NET.name); };
+$('#copyLinkBtn').onclick=()=>{ const v=$('#inviteLink').value;
+  if(navigator.clipboard){ navigator.clipboard.writeText(v).then(()=>{ $('#copyLinkBtn').textContent='✓ COPIED!'; setTimeout(()=>$('#copyLinkBtn').textContent='📋 COPY LINK',1500); }).catch(()=>{ $('#inviteLink').select(); }); }
+  else { $('#inviteLink').select(); try{document.execCommand('copy');}catch(e){} } };
+$('#shareLinkBtn').onclick=()=>{ if(navigator.share) navigator.share({title:'BLOX RIVALS',text:'Join my match!',url:$('#inviteLink').value}).catch(()=>{}); };
+$('#startMatchBtn').onclick=()=>{ NET.send({t:'start',map:selectedMap}); startArena(); };
+$('#lobbyBackBtn').onclick=()=>{ NET.disconnect(); leaveMp(); resetLobbyCards(); $('#plrows').innerHTML=''; $('#chatLog').innerHTML='';
+  $('#lobbyScreen').classList.add('hidden'); $('#startScreen').classList.remove('hidden'); };
 $('#connectBtn').onclick=()=>{ const url=$('#serverUrl').value.trim(); if(!url){ setNetStatus('Enter a server URL first','err'); return; }
   NET.name=($('#playerName').value.trim()||'Player').slice(0,14); NET.connect(url,($('#roomCode').value.trim()||'lobby1'),NET.name); };
 $('#enterArenaBtn').onclick=startArena;
@@ -1762,7 +1868,8 @@ function setAuthMode(m){ authMode=m; document.querySelectorAll('.atab').forEach(
   $('#authBtn').textContent = m==='signup'?'► CREATE ACCOUNT':'► LOG IN'; $('#authMsg').textContent=''; }
 function loginUser(name){ try{ localStorage.setItem(USER_KEY,name); }catch(e){} currentUser=name;
   $('#authScreen').classList.add('hidden'); $('#userTag').textContent='👤 '+name;
-  if($('#playerName')&&!$('#playerName').value) $('#playerName').value=name.slice(0,14); }
+  if($('#playerName')&&!$('#playerName').value) $('#playerName').value=name.slice(0,14);
+  if(typeof maybeAutoJoin==='function') maybeAutoJoin(); }   // opened via an invite link? jump to the JOIN card
 function logout(){ try{ localStorage.removeItem(USER_KEY); }catch(e){} currentUser=null;
   $('#auPass').value=''; $('#auPass2').value=''; setAuthMode(Object.keys(getAccounts()).length?'login':'signup'); $('#authScreen').classList.remove('hidden'); }
 function doAuth(){

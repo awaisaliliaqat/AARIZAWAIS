@@ -321,6 +321,7 @@
 <div id="authScreen" class="overlay">
   <div class="title">BLOX RIVALS</div>
   <div class="subtitle">Create an account to play</div>
+  <div id="authInvite" style="display:none;margin:6px auto 2px;padding:9px 16px;border-radius:10px;max-width:320px;background:rgba(57,255,20,.12);border:1px solid rgba(57,255,20,.4);color:#bfffba;font-size:14px"></div>
   <div id="authBox">
     <div id="authTabs">
       <button class="atab aon" data-m="signup">SIGN UP</button>
@@ -1799,7 +1800,8 @@ $('#invBtn').onclick=openWeaponPanel; $('#wpClose').onclick=closeWeaponPanel;
 $('#viewBtn').onclick=()=>setView(!thirdPerson);
 $('#weaponPanel').addEventListener('click',e=>{ if(e.target.id==='weaponPanel') closeWeaponPanel(); });
 
-let pendingJoinId=null; try{ pendingJoinId=new URLSearchParams(location.search).get('join'); }catch(e){}
+let pendingJoinId=null, pendingHostName='';
+try{ const q=new URLSearchParams(location.search); pendingJoinId=q.get('join'); pendingHostName=(q.get('host')||'').slice(0,16); }catch(e){}
 function resetLobbyCards(){ $('#mpChoose').style.display='flex'; $('#hostCard').style.display='none'; $('#joinCard').style.display='none';
   $('#startMatchBtn').style.display='none'; $('#hostBtn').disabled=false; $('#joinBtn').disabled=false; setNetStatus('',''); }
 function openLobby(joinMode){ $('#startScreen').classList.add('hidden'); $('#authScreen').classList.add('hidden');
@@ -1807,13 +1809,16 @@ function openLobby(joinMode){ $('#startScreen').classList.add('hidden'); $('#aut
   if(!$('#playerName').value) $('#playerName').value=(currentUser||('Player'+Math.floor(Math.random()*1000))).slice(0,14);
   resetLobbyCards();
   if(joinMode && pendingJoinId){ $('#mpChoose').style.display='none'; $('#joinCard').style.display='block';
-    $('#joinInfo').innerHTML='🎮 A friend invited you to their match!<br>Tap <b>JOIN</b> to drop in.'; } }
-function maybeAutoJoin(){ if(pendingJoinId) openLobby(true); }
+    $('#joinInfo').innerHTML='🎮 <b>'+esc(pendingHostName||'A friend')+'</b> invited you to their match!<br>Connecting you in…'; } }
+// Arrived via an invite link: open the JOIN view and connect automatically (now that they're signed in).
+function maybeAutoJoin(){ if(!pendingJoinId) return; openLobby(true);
+  const name=($('#playerName').value.trim()||currentUser||'Player').slice(0,14); NET.name=name;
+  $('#joinBtn').disabled=true; NET.startJoin(pendingJoinId,name); }
 function renderLobbyPlayers(){ const el=$('#plrows'); if(!el)return;
   const rowHtml=n=>'<div style="padding:5px 2px;border-bottom:1px solid rgba(255,255,255,.08)">'+esc(n)+'</div>';
   const you=(NET.name||'You')+' (you)'+(NET.mode==='host'?' · host':'');
   el.innerHTML=[rowHtml(you)].concat(Object.keys(remotes).map(id=>rowHtml(mpNames[id]||'Player'))).join(''); }
-function onHostReady(pid){ const link=location.origin+location.pathname+'?join='+pid;
+function onHostReady(pid){ const link=location.origin+location.pathname+'?join='+pid+'&host='+encodeURIComponent((NET.name||'A player').slice(0,16));
   $('#mpChoose').style.display='none'; $('#hostCard').style.display='block'; $('#inviteLink').value=link;
   $('#startMatchBtn').style.display=''; if(navigator.share) $('#shareLinkBtn').style.display='';
   setNetStatus('Your game is ready ✓ — share the link, then tap START MATCH.','ok'); renderLobbyPlayers(); }
@@ -1891,6 +1896,8 @@ $('#authBtn').onclick=doAuth; $('#logoutBtn').onclick=logout;
 ['auUser','auPass','auPass2'].forEach(id=>{ const el=$('#'+id); if(el) el.addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') doAuth(); }); });
 (function initAuth(){ let saved=null; try{ saved=localStorage.getItem(USER_KEY); }catch(e){}
   const accs=getAccounts();
+  if(pendingJoinId){ const inv=$('#authInvite'); if(inv){ inv.style.display='block';
+    inv.innerHTML='🎮 <b>'+esc(pendingHostName||'A friend')+'</b> invited you to play!<br>Log in or sign up — the match starts right after.'; } }
   if(saved && accs[saved.toLowerCase()]){ loginUser(accs[saved.toLowerCase()].name||saved); }
   else { setAuthMode(Object.keys(accs).length?'login':'signup'); $('#authScreen').classList.remove('hidden'); }
 })();

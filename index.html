@@ -1630,6 +1630,17 @@ let gameMode='solo', chatOpen=false, stateAcc=0;
 const DEFAULT_WS_URL='';                 // paste your server URL here to pre-fill the lobby
 const remotes={}, mpNames={}, mpScores={};
 const PLAYER_COLORS=[0x4dd2ff,0xff2e63,0xffd23f,0x6dff8c,0xb06dff,0xff9f1c,0x00e5ff,0xff7eb6];
+// STUN finds your public address; TURN relays traffic when two players' routers block a direct link
+// (most cross-network failures). Multiple providers + TCP/443 endpoints to get through strict firewalls.
+const ICE_CONFIG={ iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'turn:eu-0.turn.peerjs.com:3478',username:'peerjs',credential:'peerjsp'},
+  {urls:'turn:us-0.turn.peerjs.com:3478',username:'peerjs',credential:'peerjsp'},
+  {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
+] };
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function avatarMesh(color){
   const g=new THREE.Group(); const cloth=new THREE.MeshStandardMaterial({color});
@@ -1660,7 +1671,7 @@ const NET={
     this.mode='host'; this.name=name; this.color=PLAYER_COLORS[Math.floor(Math.random()*PLAYER_COLORS.length)]; this.conns=[];
     const code='blox'+Math.floor(Math.random()*1e8).toString(36).slice(0,6);
     setNetStatus('Creating your game…','wait');
-    try{ this.peer=new Peer(code,{debug:0}); }catch(e){ setNetStatus('Could not start hosting: '+e.message,'err'); return; }
+    try{ this.peer=new Peer(code,{debug:0,config:ICE_CONFIG}); }catch(e){ setNetStatus('Could not start hosting: '+e.message,'err'); return; }
     this.peer.on('open',pid=>{ this.connected=true; this.room=pid; onHostReady(pid); });
     this.peer.on('connection',conn=>this._wireGuest(conn));
     this.peer.on('error',err=>{ const t=err&&err.type;
@@ -1679,14 +1690,18 @@ const NET={
   startJoin(hostId,name){ if(typeof Peer==='undefined'){ setNetStatus('Could not load multiplayer — check your internet and retry.','err'); return; }
     this.mode='join'; this.name=name; this.color=PLAYER_COLORS[Math.floor(Math.random()*PLAYER_COLORS.length)]; this.room=hostId;
     setNetStatus('Connecting to the host…','wait');
-    try{ this.peer=new Peer({debug:0}); }catch(e){ setNetStatus('Could not connect: '+e.message,'err'); return; }
+    try{ this.peer=new Peer({debug:0,config:ICE_CONFIG}); }catch(e){ setNetStatus('Could not connect: '+e.message,'err'); return; }
+    this._joinTimer=setTimeout(()=>{ if(!this.connected){ try{this.peer.destroy();}catch(e){} this.peer=null;
+      setNetStatus("Couldn't reach the host. Make sure they still have the game open on this link, then tap JOIN to retry.",'err'); } }, 25000);
     this.peer.on('open',()=>{ const conn=this.peer.connect(hostId,{reliable:false}); this.host=conn;
-      conn.on('open',()=>{ this.connected=true; setNetStatus('Connected ✓ — waiting for the host to start the match…','ok');
+      conn.on('open',()=>{ clearTimeout(this._joinTimer); this.connected=true; setNetStatus('Connected ✓ — waiting for the host to start the match…','ok');
         this.send({t:'join',name:this.name,color:this.color}); onGuestReady(); });
       conn.on('data',s=>{ let o; try{o=JSON.parse(s);}catch(e){return;} this.handleMsg(o); });
-      conn.on('close',()=>{ this.connected=false; setNetStatus('The host left or the connection dropped.','err'); }); });
+      conn.on('close',()=>{ clearTimeout(this._joinTimer); this.connected=false; setNetStatus('The host left or the connection dropped.','err'); }); });
     this.peer.on('error',err=>{ const t=err&&err.type;
-      setNetStatus(t==='peer-unavailable' ? 'Game not found — ask your friend for a fresh link.' : 'Connection error: '+(t||err),'err'); }); },
+      if(t==='peer-unavailable'){ clearTimeout(this._joinTimer); setNetStatus('Game not found — ask your friend for a fresh link (and they must keep the game open).','err'); }
+      else if(t==='network'||t==='server-error'||t==='socket-error'||t==='disconnected'){ setNetStatus('Network hiccup — retrying…','wait'); }
+      else { clearTimeout(this._joinTimer); setNetStatus('Connection error: '+(t||err),'err'); } }); },
 
   send(o){ o.id=this.id; if(this.room)o.room=this.room; this.outLog.push(o); if(this.outLog.length>60)this.outLog.shift();
     const s=JSON.stringify(o);
@@ -1711,6 +1726,7 @@ const NET={
       case 'start': if(typeof o.map==='number') selectedMap=o.map; if(gameState!=='playing') startArena(); break;
     } },
   disconnect(){ try{ this.send({t:'leave'}); }catch(e){}
+    if(this._joinTimer){ clearTimeout(this._joinTimer); this._joinTimer=null; }
     if(this.ws){ try{ this.ws.close(); }catch(e){} this.ws=null; }
     if(this.host){ try{ this.host.close(); }catch(e){} this.host=null; }
     if(this.conns&&this.conns.length){ this.conns.forEach(c=>{ try{c.close();}catch(e){} }); this.conns=[]; }

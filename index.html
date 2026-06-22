@@ -877,21 +877,31 @@ let grenades=3, grenadeMax=3, lastGrenade=-10, lastMelee=-10, meleeAnim=0;
 
 // ---------- Progression (persistent via localStorage) ----------
 const SAVE_KEY='bloxRivalsProfile_v1';
-let profile=loadProfile();
-// OWNER unlock: open the site once with ?unlock=CODE to flag this device as owner.
-// After that, EVERY gun stays unlocked automatically on every load — including guns added later.
 const OWNER_CODE='aariz-owner-7731';
-try{ if(new URLSearchParams(location.search).get('unlock')===OWNER_CODE) profile.owner=true; }catch(e){}
-if(profile.owner){ profile.unlocked = weapons.map(w=>w.id); profile.armors = armors.map(a=>a.id); saveProfile(); }
+// Progress is stored PER ACCOUNT, so a brand-new account starts from scratch and has to grind everything.
+function profileKey(user){ return SAVE_KEY+'::'+String(user||'').toLowerCase(); }
+function defaultProfile(){ return { level:1, xp:0, keys:0, unlocked:['smg'], armors:[], stats:{}, claimedQuests:[], owner:false }; }
+function normalizeProfile(s){ s.level=s.level||1; s.xp=s.xp||0; s.keys=s.keys||0;
+  s.unlocked=Array.isArray(s.unlocked)?s.unlocked:['smg']; s.armors=s.armors||[]; s.stats=s.stats||{}; s.claimedQuests=s.claimedQuests||[];
+  if(!s.unlocked.includes('smg')) s.unlocked.push('smg'); return s; }
+let activeProfileKey=SAVE_KEY;
+let profile=defaultProfile();        // real profile loads once a user logs in (menu is gated by sign-in)
 let xpGainedThisGame=0, keysEarnedThisGame=0;
-function loadProfile(){
-  try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY));
-    if(s&&Array.isArray(s.unlocked)){ s.level=s.level||1; s.xp=s.xp||0; s.keys=s.keys||0; s.armors=s.armors||[];
-      s.stats=s.stats||{}; s.claimedQuests=s.claimedQuests||[];
-      if(!s.unlocked.includes('smg')) s.unlocked.push('smg'); return s; } }catch(e){}
-  return { level:1, xp:0, keys:0, unlocked:['smg'], armors:[], stats:{}, claimedQuests:[] };
+// OWNER: open the site with ?unlock=CODE while signed in to flag THAT account as owner (unlocks everything).
+function applyOwnerUnlock(){ try{ if(new URLSearchParams(location.search).get('unlock')===OWNER_CODE) profile.owner=true; }catch(e){}
+  if(profile.owner){ profile.unlocked=weapons.map(w=>w.id); profile.armors=armors.map(a=>a.id); } }
+function loadProfileFor(user,isNew){
+  activeProfileKey=profileKey(user);
+  let s=null; try{ s=JSON.parse(localStorage.getItem(activeProfileKey)); }catch(e){}
+  if((!s||!Array.isArray(s.unlocked)) && !isNew){
+    // one-time carry-over: an EXISTING account with no per-account save inherits the old shared device profile
+    // (so the original owner keeps their grind); new sign-ups (isNew) NEVER inherit anything.
+    try{ const legacy=JSON.parse(localStorage.getItem(SAVE_KEY)); if(legacy&&Array.isArray(legacy.unlocked)){ s=legacy; localStorage.removeItem(SAVE_KEY); } }catch(e){}
+  }
+  profile = (s&&Array.isArray(s.unlocked)) ? normalizeProfile(s) : defaultProfile();
+  applyOwnerUnlock(); saveProfile();
 }
-function saveProfile(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(profile)); }catch(e){} }
+function saveProfile(){ try{ localStorage.setItem(activeProfileKey, JSON.stringify(profile)); }catch(e){} }
 function xpNeeded(lvl){ return 80+(lvl-1)*55; }
 function isUnlocked(i){ return profile.unlocked.includes(weapons[i].id); }
 function firstUnlockedIndex(){ for(let i=0;i<weapons.length;i++) if(isUnlocked(i)) return i; return 0; }
@@ -1915,11 +1925,14 @@ function hashPass(s){ let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.char
 function setAuthMode(m){ authMode=m; document.querySelectorAll('.atab').forEach(t=>t.classList.toggle('aon',t.dataset.m===m));
   $('#auConfirmWrap').style.display = m==='signup'?'flex':'none';
   $('#authBtn').textContent = m==='signup'?'► CREATE ACCOUNT':'► LOG IN'; $('#authMsg').textContent=''; }
-function loginUser(name){ try{ localStorage.setItem(USER_KEY,name); }catch(e){} currentUser=name;
+function loginUser(name,isNew){ try{ localStorage.setItem(USER_KEY,name); }catch(e){} currentUser=name;
+  loadProfileFor(name, !!isNew);                          // this account's OWN progress (fresh for new sign-ups)
+  rebuildLoadout(); curWeapon=loadout[0]||0; updateProgUI();
   $('#authScreen').classList.add('hidden'); $('#userTag').textContent='👤 '+name;
-  if($('#playerName')&&!$('#playerName').value) $('#playerName').value=name.slice(0,14);
+  if($('#playerName')) $('#playerName').value=name.slice(0,14);
   if(typeof maybeAutoJoin==='function') maybeAutoJoin(); }   // opened via an invite link? jump to the JOIN card
 function logout(){ try{ localStorage.removeItem(USER_KEY); }catch(e){} currentUser=null;
+  profile=defaultProfile(); activeProfileKey=SAVE_KEY; rebuildLoadout(); updateProgUI();
   $('#auPass').value=''; $('#auPass2').value=''; setAuthMode(Object.keys(getAccounts()).length?'login':'signup'); $('#authScreen').classList.remove('hidden'); }
 function doAuth(){
   const u=$('#auUser').value.trim(), p=$('#auPass').value, msg=$('#authMsg'), accs=getAccounts();
@@ -1928,11 +1941,11 @@ function doAuth(){
   if(authMode==='signup'){
     if(p!==$('#auPass2').value){ msg.textContent='Passwords do not match'; return; }
     if(accs[u.toLowerCase()]){ msg.textContent='That username is taken — log in instead'; return; }
-    accs[u.toLowerCase()]={ name:u, p:hashPass(p) }; saveAccounts(accs); sfx('level'); loginUser(u);
+    accs[u.toLowerCase()]={ name:u, p:hashPass(p) }; saveAccounts(accs); sfx('level'); loginUser(u, true);   // brand-new account = fresh start
   } else {
     const a=accs[u.toLowerCase()];
     if(!a || a.p!==hashPass(p)){ msg.textContent='Wrong username or password'; return; }
-    loginUser(a.name||u);
+    loginUser(a.name||u, false);
   }
 }
 document.querySelectorAll('.atab').forEach(t=> t.onclick=()=>setAuthMode(t.dataset.m));
@@ -1942,7 +1955,7 @@ $('#authBtn').onclick=doAuth; $('#logoutBtn').onclick=logout;
   const accs=getAccounts();
   if(pendingJoinId){ const inv=$('#authInvite'); if(inv){ inv.style.display='block';
     inv.innerHTML='🎮 <b>'+esc(pendingHostName||'A friend')+'</b> invited you to play!<br>Log in or sign up — the match starts right after.'; } }
-  if(saved && accs[saved.toLowerCase()]){ loginUser(accs[saved.toLowerCase()].name||saved); }
+  if(saved && accs[saved.toLowerCase()]){ loginUser(accs[saved.toLowerCase()].name||saved, false); }
   else { setAuthMode(Object.keys(accs).length?'login':'signup'); $('#authScreen').classList.remove('hidden'); }
 })();
 

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#103a6e"/>
+      <stop offset="0.55" stop-color="#0a1c3a"/>
+      <stop offset="1" stop-color="#04060d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.44" r="0.5">
+      <stop offset="0" stop-color="#13a0d8" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#13a0d8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="neon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#41e6ff"/>
+      <stop offset="1" stop-color="#ff2e63"/>
+    </linearGradient>
+    <linearGradient id="neon2" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#39ff14"/>
+      <stop offset="1" stop-color="#00e5ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- full-bleed background (the OS rounds the corners for the app icon) -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#glow)"/>
+
+  <g transform="translate(256 248)">
+    <!-- blocky 'blox' diamond emblem -->
+    <g transform="rotate(45)">
+      <rect x="-104" y="-104" width="208" height="208" rx="30" fill="none" stroke="url(#neon2)" stroke-width="12" opacity="0.5"/>
+    </g>
+
+    <!-- crosshair ring -->
+    <circle r="124" fill="none" stroke="url(#neon)" stroke-width="24"/>
+
+    <!-- crosshair tick bars -->
+    <g stroke="#eafcff" stroke-width="22" stroke-linecap="round">
+      <line x1="0" y1="-162" x2="0" y2="-82"/>
+      <line x1="0" y1="82" x2="0" y2="162"/>
+      <line x1="-162" y1="0" x2="-82" y2="0"/>
+      <line x1="82" y1="0" x2="162" y2="0"/>
+    </g>
+
+    <!-- center dot -->
+    <circle r="30" fill="#ff2e63"/>
+    <circle r="30" fill="none" stroke="#fff" stroke-width="7"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="256" y="452" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="62" letter-spacing="4" fill="#eafcff">RIVALS</text>
+</svg>

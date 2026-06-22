@@ -4,6 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>BLOX RIVALS — FPS Arena</title>
+<meta name="description" content="A fast 3D arena FPS — survive waves solo or battle friends in multiplayer." />
+<meta name="theme-color" content="#04060d" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="icon" type="image/svg+xml" href="./icon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+<link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="BLOX RIVALS" />
 <style>
   :root{ --accent:#00e5ff; --accent2:#ff2e63; --good:#39ff14; --warn:#ffd400; }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -350,6 +360,7 @@
     <div id="pXPbar"><div id="pXPfill"></div></div>
     <div id="pXPtext">0 / 80 XP</div>
   </div>
+  <button id="installBtn" style="display:none;margin:10px auto 2px;padding:11px 26px;font-size:15px;background:linear-gradient(90deg,#39ff14,#00e5ff);color:#04220a;font-weight:800;border:none;border-radius:10px;cursor:pointer;pointer-events:auto;box-shadow:0 6px 22px rgba(57,255,20,.35)">📲 INSTALL APP</button>
   <div id="topPlay">
     <div class="seclabel">🗺 SELECT MAP</div>
     <div id="maps"></div>
@@ -1936,6 +1947,22 @@ $('#authBtn').onclick=doAuth; $('#logoutBtn').onclick=logout;
 })();
 
 rebuildLoadout(); buildViewModel(); updateWeaponUI(); updateNadeUI(); updateHP(); updateProgUI(); animate();
+
+// ---------- Install as an app (PWA) ----------
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }); }
+let deferredInstall=null;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || navigator.standalone;
+const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredInstall=e; const b=$('#installBtn'); if(b&&!isStandalone) b.style.display='block'; });
+window.addEventListener('appinstalled',()=>{ deferredInstall=null; const b=$('#installBtn'); if(b) b.style.display='none'; });
+(function initInstallBtn(){ const b=$('#installBtn'); if(!b) return;
+  if(isiOS && !isStandalone){ b.style.display='block'; }   // iOS has no prompt API — show how-to
+  b.onclick=async ()=>{
+    if(deferredInstall){ deferredInstall.prompt(); try{ await deferredInstall.userChoice; }catch(e){} deferredInstall=null; b.style.display='none'; }
+    else if(isiOS){ alert('To install:\\n1. Tap the Share button  ⬆️\\n2. Choose “Add to Home Screen”'); }
+    else { alert('Open this site’s browser menu (⋮) and choose “Install app” / “Add to Home screen”.'); }
+  };
+})();
 </script>
 </body>
 </html>

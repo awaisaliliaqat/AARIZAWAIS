@@ -1201,7 +1201,13 @@ function updateProjectiles(dt){
       const top=supportTopAt(pr.mesh.position.x,pr.mesh.position.z,0.2,pr.mesh.position.y+0.5);
       if(top>-1e8&&pr.mesh.position.y<top+0.2){ pr.mesh.position.y=top+0.2; pr.vel.y*=-0.4; pr.vel.x*=0.6; pr.vel.z*=0.6; }
       pr.fuse-=dt;
-      if(pr.fuse<=0 || (killY!=null&&pr.mesh.position.y<killY)){ explode(pr.mesh.position,9.5,185,38,true); mapGroup.remove(pr.mesh); projectiles.splice(i,1); }
+      // proximity trigger: blow up when it reaches a rival/enemy (after it clears the muzzle)
+      let prox=false; const gp=pr.mesh.position;
+      if(pr.fuse<1.25){
+        for(const e of enemies){ if(e.group.position.clone().setY(e.group.position.y+1.0).distanceTo(gp)<2.4){ prox=true; break; } }
+        if(!prox && gameMode==='mp'){ for(const id in remotes){ if(remotes[id].group.position.clone().setY(remotes[id].group.position.y+1.0).distanceTo(gp)<2.4){ prox=true; break; } } }
+      }
+      if(prox || pr.fuse<=0 || (killY!=null&&pr.mesh.position.y<killY)){ explode(pr.mesh.position,9.5,185,38,true); mapGroup.remove(pr.mesh); projectiles.splice(i,1); }
       continue;
     }
     // rocket
@@ -1218,7 +1224,7 @@ function updateProjectiles(dt){
     }
   }
 }
-function explode(center,radius,dmg,knock,fromPlayer){
+function explodeFX(center,radius){   // visual+audio only (also replayed on other players' screens in MP)
   const big=Math.max(1, radius/7);   // scale visuals with blast size
   burst(center,0xffa600, Math.min(130, Math.round(20*big)));
   const fl=new THREE.PointLight(0xffb347, 6*big, 16*big); fl.position.copy(center); scene.add(fl);
@@ -1228,6 +1234,9 @@ function explode(center,radius,dmg,knock,fromPlayer){
     new THREE.MeshBasicMaterial({color:0xffd27a,transparent:true,opacity:0.5,blending:THREE.AdditiveBlending,depthWrite:false}));
   sw.position.copy(center); scene.add(sw); effects.push({mesh:sw,life:Math.min(0.6,0.28*big),t:0,type:'shock',maxR:radius});
   sfx('explode'); shake=Math.max(shake, Math.min(2.0, 0.45*big));
+}
+function explode(center,radius,dmg,knock,fromPlayer){
+  explodeFX(center,radius);
   for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i];
     const c=e.group.position.clone().setY(e.group.position.y+1.2);
     const dist=c.distanceTo(center); if(dist>radius)continue;
@@ -1235,6 +1244,13 @@ function explode(center,radius,dmg,knock,fromPlayer){
     const dir=c.clone().sub(center).setY(0); if(dir.lengthSq()<0.01)dir.set(rnd(-1,1),0,rnd(-1,1));
     dir.normalize(); knockEnemy(e,dir,knock*fall,6*fall+3);
     if(e.hp<=0) killEnemy(e,false,false);
+  }
+  // multiplayer: a blast YOU caused also damages rivals in range + shows the explosion on their screen
+  if(gameMode==='mp' && fromPlayer){
+    NET.send({t:'boom',at:[+center.x.toFixed(1),+center.y.toFixed(1),+center.z.toFixed(1)],r:radius});
+    for(const id in remotes){ const rg=remotes[id].group;
+      const c=rg.position.clone().setY(rg.position.y+1.2); const dist=c.distanceTo(center); if(dist>radius)continue;
+      const d=Math.round(dmg*(1-dist/radius)); if(d>0) NET.send({t:'hit',target:id,dmg:d,head:false}); }
   }
   // player knockback (rocket-jump / nearby blast)
   const pc=player.pos.clone().setY(player.pos.y+0.9); const pd=pc.distanceTo(center);
@@ -1723,6 +1739,7 @@ const NET={
       case 'forfeit': onForfeit(o.id); break;
       case 'cheat': onCheat(o.id); break;
       case 'win': onWin(o.id,o.name); break;
+      case 'boom': if(o.at) explodeFX(new THREE.Vector3(o.at[0],o.at[1],o.at[2]), o.r||8); break;
       case 'start': if(typeof o.map==='number') selectedMap=o.map; if(gameState!=='playing') startArena(); break;
     } },
   disconnect(){ try{ this.send({t:'leave'}); }catch(e){}

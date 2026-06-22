@@ -1770,6 +1770,31 @@ function avatarMesh(color,skinColor,hat,face){
   attachHat(g,hat,color);
   return g;
 }
+// floating name tag above a player's head (billboard sprite)
+function nameSpriteTex(name){
+  const f='bold 46px "Trebuchet MS", Arial, sans-serif';
+  const meas=document.createElement('canvas').getContext('2d'); meas.font=f;
+  const tw=Math.max(40, meas.measureText(name).width);
+  const cv=document.createElement('canvas'); cv.width=Math.ceil(tw)+44; cv.height=72;
+  const c=cv.getContext('2d'); c.font=f; c.textAlign='center'; c.textBaseline='middle';
+  const x=4,y=12,w=cv.width-8,h=44,rad=16;
+  c.fillStyle='rgba(8,14,24,0.62)'; c.beginPath();
+  if(c.roundRect) c.roundRect(x,y,w,h,rad); else c.rect(x,y,w,h);
+  c.fill(); c.lineWidth=2; c.strokeStyle='rgba(255,255,255,0.22)'; c.stroke();
+  c.fillStyle='#eafcff'; c.fillText(name, cv.width/2, y+h/2+1);
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=4;
+  return {tex, aspect:cv.width/cv.height};
+}
+function makeNameSprite(name){
+  const t=nameSpriteTex(name||'Player');
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t.tex,depthTest:false,depthWrite:false,transparent:true}));
+  const H=0.44; sp.scale.set(t.aspect*H,H,1); sp.position.set(0,3.05,0); sp.renderOrder=999; sp.raycast=function(){};
+  return sp;
+}
+function setRemoteName(r,name){ if(!r||!r.nameSprite)return; const t=nameSpriteTex(name||'Player');
+  if(r.nameSprite.material.map) r.nameSprite.material.map.dispose();
+  r.nameSprite.material.map=t.tex; r.nameSprite.material.needsUpdate=true;
+  const H=0.44; r.nameSprite.scale.set(t.aspect*H,H,1); }
 const NET={
   ws:null, peer:null, conns:[], host:null, mode:null,
   id:'p'+Math.floor(Math.random()*1e9).toString(36), name:'Player', color:0x5b7a99, skin:0xeec4a0, hat:'none', face:'dots', room:'', connected:false, outLog:[],
@@ -1857,12 +1882,15 @@ function setNetStatus(t,cls){ const el=$('#netStatus'); if(el){ el.textContent=t
 function addRemote(id,name,color,skin,hat,face){ if(remotes[id])return; mpNames[id]=name||'Player'; if(!(id in mpScores))mpScores[id]=0;
   const g=avatarMesh(color||0x888888, (typeof skin==='number'?skin:0xeec4a0), (typeof hat==='string'?hat:'none'), (typeof face==='string'?face:'dots')); g.userData.remoteId=id; scene.add(g);
   if(!shootTargets.includes(g)) shootTargets.push(g);
-  remotes[id]={group:g,color:color||0x888888,hp:100,target:{x:0,y:0,z:0,yaw:0},lastSeen:clock.elapsedTime};
+  const np=makeNameSprite(mpNames[id]); g.add(np);
+  remotes[id]={group:g,color:color||0x888888,hp:100,target:{x:0,y:0,z:0,yaw:0},lastSeen:clock.elapsedTime,nameSprite:np};
   renderScoreboard(); }
 function removeRemote(id){ const r=remotes[id]; if(!r)return; scene.remove(r.group);
+  if(r.nameSprite){ if(r.nameSprite.material.map) r.nameSprite.material.map.dispose(); r.nameSprite.material.dispose(); }
   const si=shootTargets.indexOf(r.group); if(si>=0)shootTargets.splice(si,1); delete remotes[id]; renderScoreboard(); }
 function onRemoteState(o){ let r=remotes[o.id]; if(!r){ addRemote(o.id,o.name,o.color,o.skin,o.hat,o.face); r=remotes[o.id]; }
-  r.target.x=o.x; r.target.y=o.y; r.target.z=o.z; r.target.yaw=o.yaw; r.hp=o.hp; r.lastSeen=clock.elapsedTime; if(o.name)mpNames[o.id]=o.name; }
+  r.target.x=o.x; r.target.y=o.y; r.target.z=o.z; r.target.yaw=o.yaw; r.hp=o.hp; r.lastSeen=clock.elapsedTime;
+  if(o.name && mpNames[o.id]!==o.name){ mpNames[o.id]=o.name; setRemoteName(r,o.name); } }
 function updateRemotes(dt){ const now=clock.elapsedTime;
   for(const id in remotes){ const r=remotes[id], g=r.group, t=r.target, k=Math.min(1,dt*12);
     g.position.x+=(t.x-g.position.x)*k; g.position.y+=(t.y-g.position.y)*k; g.position.z+=(t.z-g.position.z)*k; g.rotation.y=t.yaw;

@@ -992,6 +992,14 @@ const QUESTS=[
  {id:'q_kills100',name:'Veteran',      desc:'Get 100 eliminations',         stat:'kills',        target:100, reward:25},
  {id:'q_mpwin',   name:'Champion',     desc:'Win a multiplayer match',      stat:'mpWins',       target:1,   reward:15},
 ];
+let questResetPending=false;
+// once every quest is claimed, wipe progress + claims after 1s so they can all be earned again
+function checkQuestReset(){ if(questResetPending) return;
+  if(QUESTS.length && QUESTS.every(x=>(profile.claimedQuests||[]).includes(x.id))){
+    questResetPending=true;
+    if(typeof pushFeed==='function') pushFeed('🎯 All quests complete — resetting for a new round!');
+    setTimeout(()=>{ profile.claimedQuests=[]; profile.stats={}; saveProfile(); questResetPending=false; if(typeof updateProgUI==='function') updateProgUI(); }, 1000);
+  } }
 function questNotify(stat,before,after){ QUESTS.forEach(q=>{ if(q.stat===stat && before<q.target && after>=q.target && !(profile.claimedQuests||[]).includes(q.id))
   pushFeed('🎯 QUEST COMPLETE: '+q.name+' — claim +'+q.reward+'🔑 in the menu'); }); }
 function questTrack(stat,n=1){ profile.stats=profile.stats||{}; const b=profile.stats[stat]||0; profile.stats[stat]=b+n; saveProfile(); questNotify(stat,b,b+n); }
@@ -1009,7 +1017,8 @@ function renderQuests(){ const el=$('#questList'); if(!el)return; el.innerHTML='
     card.innerHTML='<div class="q-name">'+q.name+' <span class="q-rw">+'+q.reward+'🔑</span></div><div class="q-desc">'+q.desc+'</div>'
       +'<div class="qbar"><div class="qfill" style="width:'+(prog/q.target*100)+'%"></div></div>'+btn;
     if(done&&!isC){ card.querySelector('.ubtn').onclick=()=>claimQuest(q.id); }
-    el.appendChild(card); }); }
+    el.appendChild(card); });
+  checkQuestReset(); }
 function addXP(n){ profile.xp+=n; xpGainedThisGame+=n;
   while(profile.xp>=xpNeeded(profile.level)){ profile.xp-=xpNeeded(profile.level); profile.level++;
     const k=1+(profile.level%5===0?2:0); profile.keys+=k; keysEarnedThisGame+=k;

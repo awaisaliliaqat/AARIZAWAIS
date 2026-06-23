@@ -163,9 +163,9 @@
     background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:18px 26px;}
   .controls b{color:var(--warn);font-family:monospace;}
 
-  #finalstats{display:flex;gap:36px;margin:18px 0 4px;justify-content:center;flex-wrap:wrap;}
-  #finalstats .fv{font-size:42px;font-weight:900;color:var(--accent);}
-  #finalstats .fl{font-size:11px;letter-spacing:2px;opacity:.7;text-transform:uppercase;}
+  #finalstats,.claimstats{display:flex;gap:36px;margin:18px 0 4px;justify-content:center;flex-wrap:wrap;}
+  #finalstats .fv,.claimstats .fv{font-size:42px;font-weight:900;color:var(--accent);}
+  #finalstats .fl,.claimstats .fl{font-size:11px;letter-spacing:2px;opacity:.7;text-transform:uppercase;}
   .hint{margin-top:20px;font-size:13px;opacity:.55;max-width:560px;}
   /* progression + armory */
   #prog{margin-top:14px;width:340px;max-width:92vw;}
@@ -501,6 +501,23 @@
     <button class="btn" id="armoryBtn">🔑 ARMORY</button>
   </div>
   <div class="hint">Earn XP every elimination — ring-outs give the most. Level up for keys, then hit the Armory to unlock new weapons permanently.</div>
+</div>
+
+<!-- solo leave: claim what you earned this run -->
+<div id="claimScreen" class="overlay hidden">
+  <div class="title" style="font-size:48px">RUN PAUSED</div>
+  <div class="subtitle">Claim what you earned this run</div>
+  <div class="claimstats">
+    <div><div class="fv" id="cKills">0</div><div class="fl">Eliminations</div></div>
+    <div><div class="fv" id="cWave">1</div><div class="fl">Wave Reached</div></div>
+    <div><div class="fv" id="cXP">+0</div><div class="fl">XP Earned</div></div>
+    <div><div class="fv" id="cKeys">+0</div><div class="fl">🔑 Keys Earned</div></div>
+  </div>
+  <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center">
+    <button class="btn" id="claimExitBtn" style="background:linear-gradient(90deg,#39ff14,#00e5ff);color:#04220a">✓ CLAIM &amp; EXIT</button>
+    <button class="btn danger" id="resumeBtn">▶ KEEP PLAYING</button>
+  </div>
+  <div class="hint">Your keys are already saved to your account — spend them in the Armory to unlock weapons &amp; armor.</div>
 </div>
 
 <!-- banned -->
@@ -1942,12 +1959,17 @@ function leaveMp(){ gameMode='solo'; chatOpen=false; $('#mpChatInput').classList
   Object.keys(remotes).forEach(removeRemote); $('#scoreboard').classList.remove('on'); $('#mpChat').innerHTML=''; }
 function showLeaveBtn(on){ $('#leaveBtn').classList.toggle('on',on); $('#invBtn').classList.toggle('on',on); $('#viewBtn').classList.toggle('on',on);
   if(!on){ $('#weaponPanel').classList.remove('on'); if(playerBody) playerBody.visible=false; } }
-// in-game LEAVE button: go to lobby/menu; in MP the remaining player(s) win
+// in-game LEAVE button: MP forfeits to the lobby; SOLO pauses to a claim screen first
 function doLeave(){ document.exitPointerLock?.(); showLeaveBtn(false); $('#victory').classList.remove('on'); firing=false;
   if(gameMode==='mp'){ NET.send({t:'forfeit'}); leaveMp(); gameState='menu';
-    $('#lobbyScreen').classList.remove('hidden'); $('#startScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden'); }
-  else { gameState='menu'; $('#startScreen').classList.remove('hidden'); $('#overScreen').classList.add('hidden'); }
-  updateRotateHint(); }
+    $('#lobbyScreen').classList.remove('hidden'); $('#startScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden'); updateRotateHint(); }
+  else { openClaim(); }
+}
+// solo: pause and show the run's rewards with a CLAIM button (keys are already banked, this confirms + lets you exit or resume)
+function openClaim(){ gameState='over'; firing=false; showLeaveBtn(false); document.exitPointerLock?.(); updateRotateHint();
+  $('#cKills').textContent=kills; $('#cWave').textContent=wave;
+  $('#cXP').textContent='+'+xpGainedThisGame; $('#cKeys').textContent='+'+keysEarnedThisGame;
+  saveProfile(); $('#claimScreen').classList.remove('hidden'); }
 function onForfeit(id){ const name=mpNames[id]||'A player'; removeRemote(id);
   pushMpChat(null,'🏳 '+name+' forfeited the match');
   if(gameMode==='mp' && gameState==='playing' && Object.keys(remotes).length===0) declareWin(); }
@@ -1980,6 +2002,10 @@ function returnToLobbyAfterMatch(){
   else { resetLobbyCards(); }
   updateRotateHint&&updateRotateHint(); }
 $('#leaveBtn').onclick=doLeave;
+$('#claimExitBtn').onclick=()=>{ $('#claimScreen').classList.add('hidden'); gameState='menu'; saveProfile(); updateProgUI();
+  $('#startScreen').classList.remove('hidden'); $('#overScreen').classList.add('hidden'); sfx('level'); updateRotateHint(); };
+$('#resumeBtn').onclick=()=>{ $('#claimScreen').classList.add('hidden'); gameState='playing'; showLeaveBtn(true); clock.getDelta(); updateRotateHint();
+  if(!IS_TOUCH) renderer.domElement.requestPointerLock(); };
 $('#invBtn').onclick=openWeaponPanel; $('#wpClose').onclick=closeWeaponPanel;
 $('#viewBtn').onclick=()=>setView(!thirdPerson);
 $('#weaponPanel').addEventListener('click',e=>{ if(e.target.id==='weaponPanel') closeWeaponPanel(); });

@@ -1706,6 +1706,7 @@ function animate(){ requestAnimationFrame(animate); const dt=Math.min(0.05,clock
 let gameMode='solo', chatOpen=false, stateAcc=0;
 const DEFAULT_WS_URL='';                 // paste your server URL here to pre-fill the lobby
 const remotes={}, mpNames={}, mpScores={};
+const MP_KILL_TARGET=50;   // first player to this many kills wins the match
 const PLAYER_COLORS=[0x4dd2ff,0xff2e63,0xffd23f,0x6dff8c,0xb06dff,0xff9f1c,0x00e5ff,0xff7eb6];
 // STUN finds your public address; TURN relays traffic when two players' routers block a direct link
 // (most cross-network failures). Multiple providers + TCP/443 endpoints to get through strict firewalls.
@@ -1907,7 +1908,8 @@ function mpRespawn(){ const sp=currentMap.spawns[Math.floor(Math.random()*curren
 function onMpDeath(id,by){ if(by){ mpScores[by]=(mpScores[by]||0)+1; }
   const victim=mpNames[id]||'A player', killer=(by===NET.id)?NET.name:(mpNames[by]||'someone');
   pushMpChat(null, victim+' was eliminated'+(by?' by '+killer:''));
-  if(by===NET.id){ kills++; score+=100; document.getElementById('kills').textContent=kills; addXP(25); questTrack('kills'); }
+  if(by===NET.id){ kills++; score+=100; document.getElementById('kills').textContent=kills+' / '+MP_KILL_TARGET; addXP(25); questTrack('kills');
+    if(kills>=MP_KILL_TARGET){ declareWin(); } }
   renderScoreboard(); }
 function renderScoreboard(){ const el=$('#sbrows'); if(!el)return;
   const rows=[{id:NET.id,name:NET.name+' (you)'}].concat(Object.keys(remotes).map(id=>({id,name:mpNames[id]||'Player'})));
@@ -1928,10 +1930,12 @@ function closeMpChat(send){ const i=$('#mpChatInput'); if(send) sendChat(i.value
 function startArena(){ if(isBanned()){ $('#bannedScreen').classList.remove('hidden'); return; }
   $('#lobbyScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden');
   gameMode='mp'; gameState='playing'; resetGame();
-  document.getElementById('wave').textContent='ARENA';
+  document.getElementById('wave').textContent='FIRST TO '+MP_KILL_TARGET;
   document.getElementById('mapname').textContent=MAPS[selectedMap].name+' · MULTIPLAYER';
   for(const id in remotes){ const g=remotes[id].group; if(g.parent!==scene) scene.add(g); if(!shootTargets.includes(g)) shootTargets.push(g); }
-  mpScores[NET.id]=mpScores[NET.id]||0; $('#scoreboard').classList.add('on'); renderScoreboard(); showLeaveBtn(true);
+  for(const k in mpScores) delete mpScores[k]; mpScores[NET.id]=0;                 // fresh scores each match
+  document.getElementById('kills').textContent='0 / '+MP_KILL_TARGET;
+  $('#scoreboard').classList.add('on'); renderScoreboard(); showLeaveBtn(true);
   $('#bChat').style.display='flex'; goFullscreen(); updateRotateHint();
   if(!IS_TOUCH) renderer.domElement.requestPointerLock(); }
 function leaveMp(){ gameMode='solo'; chatOpen=false; $('#mpChatInput').classList.remove('on'); $('#bChat').style.display='none';
@@ -1949,15 +1953,32 @@ function onForfeit(id){ const name=mpNames[id]||'A player'; removeRemote(id);
   if(gameMode==='mp' && gameState==='playing' && Object.keys(remotes).length===0) declareWin(); }
 function onCheat(id){ const n=mpNames[id]||'A player'; removeRemote(id);
   pushMpChat(null,'🚫 '+n+' was banned for cheating'); addChat(null,n+' was banned for cheating',true); }
-// YOU won the match -> tell everyone, show banner with your username
-function declareWin(){ NET.send({t:'win', name:NET.name}); questTrack('mpWins'); showWin(NET.name, true); }
+// YOU won the match (reached the kill target, or last one standing) -> tell everyone + end the match
+function declareWin(){ if(gameMode!=='mp'||gameState!=='playing')return; NET.send({t:'win', name:NET.name}); questTrack('mpWins'); endMpMatch(NET.name, true); }
 function onWin(id,name){ const nm=name||mpNames[id]||'A player';
-  if(gameMode==='mp' && gameState==='playing') showWin(nm,false);
-  pushMpChat(null,'🏆 '+nm+' WON the match'); addChat(null,nm+' won the match',true); }
-function showWin(name, you){ const v=$('#victory');
+  pushMpChat(null,'🏆 '+nm+' WON the match'); addChat(null,nm+' won the match',true);
+  if(gameMode==='mp' && gameState==='playing') endMpMatch(nm,false); }
+function showWin(name, you, sub){ const v=$('#victory');
   v.querySelector('.vtitle').innerHTML='🏆 '+esc(name)+' WON!';
-  v.querySelector('.vsub').textContent = you ? 'You won the match — last one standing!' : (name+' won the match');
-  v.classList.add('on'); sfx('level'); if(you) addXP(50); setTimeout(()=>v.classList.remove('on'),4200); }
+  v.querySelector('.vsub').textContent = sub || (you ? 'You won the match!' : (name+' won the match'));
+  v.classList.add('on'); sfx('level'); if(you) addXP(50); }
+// end of an MP match: freeze, show the winner, then drop everyone back to the lobby for a rematch
+function endMpMatch(name, you){
+  if(gameState!=='playing') return;
+  gameState='gameover'; firing=false; document.exitPointerLock&&document.exitPointerLock();
+  showWin(name, you, you ? ('You hit '+MP_KILL_TARGET+' kills — winner!') : (name+' reached '+MP_KILL_TARGET+' kills'));
+  setTimeout(returnToLobbyAfterMatch, 6000);
+}
+function returnToLobbyAfterMatch(){
+  $('#victory').classList.remove('on'); showLeaveBtn(false);
+  Object.keys(remotes).forEach(removeRemote); $('#scoreboard').classList.remove('on'); $('#mpChat').innerHTML=''; $('#bChat').style.display='none';
+  chatOpen=false; $('#mpChatInput').classList.remove('on'); gameState='menu';
+  $('#overScreen').classList.add('hidden'); $('#startScreen').classList.add('hidden'); $('#lobbyScreen').classList.remove('hidden');
+  if(NET.mode==='host'){ onHostReady(NET.room); setNetStatus('Match over — tap START MATCH for a rematch.','ok'); }
+  else if(NET.mode==='join'){ $('#mpChoose').style.display='none'; $('#joinCard').style.display='none'; $('#hostCard').style.display='none'; $('#startMatchBtn').style.display='none';
+    setNetStatus('Match over — waiting for the host to start again…','ok'); renderLobbyPlayers(); }
+  else { resetLobbyCards(); }
+  updateRotateHint&&updateRotateHint(); }
 $('#leaveBtn').onclick=doLeave;
 $('#invBtn').onclick=openWeaponPanel; $('#wpClose').onclick=closeWeaponPanel;
 $('#viewBtn').onclick=()=>setView(!thirdPerson);

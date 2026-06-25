@@ -963,7 +963,8 @@ function saveProfile(){ try{ localStorage.setItem(activeProfileKey, JSON.stringi
 // ---- Limited-time free weapon gifts (per account, 20-minute windows) ----
 const GIFTS=[
   { user:'daneen', weapons:['reaper'], ms:20*60*1000, renew:false },   // one-time 20-min REAPER
-  { user:'awais',  weapons:'ALL',      ms:20*60*1000, renew:true  },    // ALL guns, 20 min, timer RESTARTS on every refresh
+  { user:'awais',  weapons:'ALL', perm:true },                         // ALL guns, PERMANENT
+  { user:'aws',    weapons:'ALL', perm:true },                         // ALL guns, PERMANENT
 ];
 let giftTimer=null;
 function giftIds(g){ return g.weapons==='ALL' ? weapons.filter(w=>!w.ownerOnly).map(w=>w.id) : g.weapons.slice(); }
@@ -980,6 +981,13 @@ function applyTimedGift(user){
   if(giftTimer){ clearTimeout(giftTimer); giftTimer=null; }
   const g = user ? GIFTS.find(x=>x.user===String(user).toLowerCase()) : null;
   if(!g){ if(profile.tempGift && Array.isArray(profile.tempGift.applied) && profile.tempGift.applied.length) removeGiftedGuns(false); return; }
+  if(g.perm){   // permanent unlock — add all the guns and keep them forever (no timer)
+    let changed=false; giftIds(g).forEach(id=>{ if(!profile.unlocked.includes(id)){ profile.unlocked.push(id); changed=true; } });
+    if(profile.tempGift){ delete profile.tempGift; changed=true; }   // drop any old timed-gift tracking so they're never removed
+    if(changed) saveProfile();
+    if(typeof pushFeed==='function') pushFeed('🎁 All weapons unlocked — yours to keep!');
+    return;
+  }
   const now=Date.now(), ids=giftIds(g);
   let tg=profile.tempGift;
   if(!tg || tg.user!==g.user){ tg={ user:g.user, until:0, applied:[], used:false }; profile.tempGift=tg; }

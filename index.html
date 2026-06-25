@@ -960,32 +960,47 @@ function loadProfileFor(user,isNew){
 }
 function saveProfile(){ try{ localStorage.setItem(activeProfileKey, JSON.stringify(profile)); }catch(e){} }
 
-// ---- Limited-time free weapon gift (one specific account, one-time 20-minute trial) ----
-const GIFT={ user:'daneen', weapon:'reaper', ms:20*60*1000 };
+// ---- Limited-time free weapon gifts (per account, 20-minute windows) ----
+const GIFTS=[
+  { user:'daneen', weapons:['reaper'], ms:20*60*1000, renew:false },   // one-time 20-min REAPER
+  { user:'awais',  weapons:'ALL',      ms:20*60*1000, renew:true  },    // ALL guns, 20 min, timer RESTARTS on every refresh
+];
 let giftTimer=null;
-function removeGiftedGun(){
-  if(!profile.tempGift) return;
-  if(profile.tempGift.applied){ const i=profile.unlocked.indexOf(GIFT.weapon); if(i>=0) profile.unlocked.splice(i,1); }
-  profile.tempGift.applied=false; profile.tempGift.done=true; saveProfile();
-  if(typeof rebuildLoadout==='function') rebuildLoadout();
-  if(weapons[curWeapon] && weapons[curWeapon].id===GIFT.weapon){ curWeapon=loadout[0]||0; if(typeof buildViewModel==='function') buildViewModel(); if(typeof updateWeaponUI==='function') updateWeaponUI(); }
+function giftIds(g){ return g.weapons==='ALL' ? weapons.filter(w=>!w.ownerOnly).map(w=>w.id) : g.weapons.slice(); }
+function removeGiftedGuns(markUsed){
+  const tg=profile.tempGift; if(!tg) return;
+  if(Array.isArray(tg.applied)) tg.applied.forEach(id=>{ const i=profile.unlocked.indexOf(id); if(i>=0) profile.unlocked.splice(i,1); });
+  tg.applied=[]; if(markUsed) tg.used=true; saveProfile();
+  if(typeof rebuildLoadout==='function'){ rebuildLoadout();
+    if(weapons[curWeapon] && !isUnlocked(curWeapon)){ curWeapon=loadout[0]||0; if(typeof buildViewModel==='function') buildViewModel(); if(typeof updateWeaponUI==='function') updateWeaponUI(); } }
   if(typeof updateProgUI==='function') updateProgUI();
-  if(typeof pushFeed==='function') pushFeed('⏰ Your free REAPER trial has ended');
+  if(typeof pushFeed==='function') pushFeed('⏰ Your free weapon trial has ended');
 }
 function applyTimedGift(user){
   if(giftTimer){ clearTimeout(giftTimer); giftTimer=null; }
-  if(!user || user.toLowerCase()!==GIFT.user) return;
-  const now=Date.now();
-  let g=profile.tempGift;
-  if(!g || g.weapon!==GIFT.weapon){ g={ weapon:GIFT.weapon, until:now+GIFT.ms, applied:false, done:false }; profile.tempGift=g; }
-  if(!g.done && now < g.until){
-    if(!profile.unlocked.includes(GIFT.weapon)){ profile.unlocked.push(GIFT.weapon); g.applied=true; }
+  const g = user ? GIFTS.find(x=>x.user===String(user).toLowerCase()) : null;
+  if(!g){ if(profile.tempGift && Array.isArray(profile.tempGift.applied) && profile.tempGift.applied.length) removeGiftedGuns(false); return; }
+  const now=Date.now(), ids=giftIds(g);
+  let tg=profile.tempGift;
+  if(!tg || tg.user!==g.user){ tg={ user:g.user, until:0, applied:[], used:false }; profile.tempGift=tg; }
+  tg.applied = Array.isArray(tg.applied) ? tg.applied : [];
+  if(g.renew){
+    // renewable: every login/refresh restarts the 20-minute window
+    tg.until = now + g.ms; tg.used=false;
+    ids.forEach(id=>{ if(!profile.unlocked.includes(id)){ profile.unlocked.push(id); if(!tg.applied.includes(id)) tg.applied.push(id); } });
     saveProfile();
-    const mins=Math.ceil((g.until-now)/60000);
-    if(typeof pushFeed==='function') pushFeed('🎁 Free REAPER unlocked for ~'+mins+' more min!');
-    giftTimer=setTimeout(removeGiftedGun, Math.max(0, g.until-now));
+    if(typeof pushFeed==='function') pushFeed('🎁 ALL weapons FREE for 20 min — refresh to renew!');
+    giftTimer=setTimeout(()=>removeGiftedGuns(false), g.ms);
   } else {
-    removeGiftedGun();   // expired or already used -> make sure it's gone
+    // one-time window
+    if(!tg.until) tg.until = now + g.ms;
+    if(!tg.used && now < tg.until){
+      ids.forEach(id=>{ if(!profile.unlocked.includes(id)){ profile.unlocked.push(id); if(!tg.applied.includes(id)) tg.applied.push(id); } });
+      saveProfile();
+      const mins=Math.ceil((tg.until-now)/60000);
+      if(typeof pushFeed==='function') pushFeed('🎁 Free '+ids.join(', ').toUpperCase()+' for ~'+mins+' min!');
+      giftTimer=setTimeout(()=>removeGiftedGuns(true), Math.max(0, tg.until-now));
+    } else { removeGiftedGuns(true); }
   }
 }
 function xpNeeded(lvl){ return 80+(lvl-1)*55; }

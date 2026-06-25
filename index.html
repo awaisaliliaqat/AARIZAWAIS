@@ -85,6 +85,8 @@
   #bFire{right:28px;bottom:94px;width:92px;height:92px;background:rgba(255,46,99,.35);font-size:16px;}
   #bJump{right:132px;bottom:38px;width:72px;height:72px;background:rgba(57,255,20,.25);}
   #bMelee{right:132px;bottom:122px;width:60px;height:60px;}
+  #bAim{right:204px;bottom:120px;width:58px;height:58px;font-size:22px;background:rgba(0,229,255,.25);}
+  #bAim.on{background:rgba(0,229,255,.6);border-color:#fff;}
   #bNade{right:36px;bottom:198px;width:60px;height:60px;background:rgba(255,212,0,.22);}
   #bReload{right:120px;bottom:198px;width:54px;height:54px;font-size:11px;}
   #bSwap{right:36px;bottom:266px;width:52px;height:52px;font-size:11px;}
@@ -331,6 +333,7 @@
   <div class="mbtn" id="bFire">FIRE</div>
   <div class="mbtn" id="bJump">JUMP</div>
   <div class="mbtn" id="bMelee">🔪</div>
+  <div class="mbtn" id="bAim">🔍</div>
   <div class="mbtn" id="bNade">🧨</div>
   <div class="mbtn" id="bReload">RELOAD</div>
   <div class="mbtn" id="bSwap">SWAP</div>
@@ -877,6 +880,8 @@ addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.upd
 
 function startFire(){ firing=true; if(gameState==='playing'&&!weapons[curWeapon].auto) tryFire(); }
 function releaseFire(){ firing=false; }
+function updateAimBtn(){ const b=document.getElementById('bAim'); if(b) b.classList.toggle('on', aiming); }
+function toggleAim(){ if(gameState!=='playing') return; aiming=!aiming; updateAimBtn(); }   // mobile: tap to zoom
 
 // ---------- Weapons ----------
 const weapons=[
@@ -1546,7 +1551,7 @@ function updatePlayer(dt){
   player.standingOn=null;
 
   // look (mobile deltas)
-  if(lookDelta.x||lookDelta.y){ player.yaw-=lookDelta.x*sens; player.pitch-=lookDelta.y*sens;
+  if(lookDelta.x||lookDelta.y){ const s=aiming?sens*0.5:sens; player.yaw-=lookDelta.x*s; player.pitch-=lookDelta.y*s;
     const lim=Math.PI/2-0.05; player.pitch=Math.max(-lim,Math.min(lim,player.pitch)); lookDelta.x=lookDelta.y=0; }
 
   camera.rotation.order='YXZ';
@@ -1614,7 +1619,7 @@ function updatePlayer(dt){
 
 // ---------- Game flow ----------
 function resetGame(){
-  aiming=false; camera.fov=BASE_FOV; camera.updateProjectionMatrix();
+  aiming=false; updateAimBtn(); camera.fov=BASE_FOV; camera.updateProjectionMatrix();
   [...enemies].forEach(removeEnemy);
   effects.splice(0).forEach(f=>scene.remove(f.mesh));
   projectiles.splice(0).forEach(p=>mapGroup.remove(p.mesh));
@@ -1718,6 +1723,7 @@ if(IS_TOUCH){ $('#mobile').classList.add('on');
   btn('#bFire',startFire,releaseFire);
   btn('#bJump',()=>{keys['Space']=true;},()=>{keys['Space']=false;});
   btn('#bMelee',melee); btn('#bNade',throwGrenade); btn('#bReload',reload);
+  btn('#bAim',toggleAim);   // tap to zoom in, tap again to zoom out
   btn('#bSwap',()=>cycleWeapon(1)); btn('#bChat',()=>openMpChat()); btn('#bInv',()=>openWeaponPanel());
   $('#mpChatInput').addEventListener('blur',()=>{ if(chatOpen) closeMpChat(false); }); // dismiss keyboard closes chat
 }

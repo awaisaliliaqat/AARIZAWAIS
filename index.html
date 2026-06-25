@@ -369,7 +369,7 @@
     <a id="logoutBtn">log out</a>
   </div>
   <div id="prog">
-    <div class="progrow"><span>LEVEL <b id="pLevel">1</b></span><span>❤ <b id="pMaxHp">500</b> MP&nbsp;HP</span><span><b id="pKeys">0</b> 🔑 KEYS</span></div>
+    <div class="progrow"><span>LEVEL <b id="pLevel">1</b></span><span>🛡 <b id="pMaxHp">+0</b> ARMOR&nbsp;HP</span><span><b id="pKeys">0</b> 🔑 KEYS</span></div>
     <div id="pXPbar"><div id="pXPfill"></div></div>
     <div id="pXPtext">0 / 80 XP</div>
   </div>
@@ -386,7 +386,7 @@
   <details class="help" id="armoryWrap" open><summary>🔫 ARMORY — spend keys to permanently unlock weapons</summary>
     <div id="armory"></div>
   </details>
-  <details class="help" id="armorWrap" open><summary>🛡 ARMOR — more max health in MULTIPLAYER (no effect in solo)</summary>
+  <details class="help" id="armorWrap" open><summary>🛡 ARMOR — more max health (works in solo &amp; multiplayer)</summary>
     <button id="ownerArmorBtn" class="btn" style="display:none;margin:10px auto 2px;padding:11px 26px;font-size:14px;background:linear-gradient(90deg,#ffd23f,#fff3a0);color:#3a2a00;box-shadow:0 6px 22px rgba(255,210,63,.4)">👑 EQUIP OWNER SHELL (+5000)</button>
     <div id="armorShop"></div>
   </details>
@@ -1026,9 +1026,7 @@ function bestArmorIndex(){   // explicitly equipped armor if owned, else the bes
 function bestArmorBonus(){ const i=bestArmorIndex(); return i>=0?armors[i].bonus:0; }
 function equipArmor(i){ if(!isArmorOwned(i))return false; profile.equippedArmor=armors[i].id; saveProfile(); return true; }
 function playerMaxHp(){
-  const ai=bestArmorIndex(), a=ai>=0?armors[ai]:null;
-  if(a&&a.ownerOnly) return ((gameMode==='mp')?500:50)+a.bonus;   // owner armor works everywhere (solo too)
-  return (gameMode==='mp') ? (500 + bestArmorBonus()) : 50;        // normal armor: multiplayer only; solo flat 50
+  return ((gameMode==='mp') ? 500 : 50) + bestArmorBonus();   // armor adds health in BOTH solo and multiplayer
 }
 function unlockArmor(i){ const a=armors[i];
   if(a.ownerOnly) return false;   // can't be bought — owner-only
@@ -1684,7 +1682,7 @@ function renderArmorShop(){ const el=$('#armorShop'); if(!el)return; el.innerHTM
     el.appendChild(card); }); }
 function updateProgUI(){ if($('#pLevelTop')) $('#pLevelTop').textContent=profile.level;
   if($('#pLevel')){ $('#pLevel').textContent=profile.level; $('#pKeys').textContent=profile.keys;
-    if($('#pMaxHp')) $('#pMaxHp').textContent=(500+bestArmorBonus());   // armor only applies in multiplayer
+    if($('#pMaxHp')) $('#pMaxHp').textContent='+'+bestArmorBonus();   // armor bonus (applies in solo & MP)
     $('#pXPfill').style.width=Math.min(100,profile.xp/xpNeeded(profile.level)*100)+'%';
     $('#pXPtext').textContent=profile.xp+' / '+xpNeeded(profile.level)+' XP'; }
   renderArmory(); renderArmorShop(); renderQuests(); updateLevelHUD();

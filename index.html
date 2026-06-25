@@ -849,6 +849,7 @@ let shake=0;
 // ---------- Input ----------
 const keys={}; let locked=false, firing=false, gameState='menu';
 let sens=0.0022;
+let aiming=false; const BASE_FOV=80, AIM_FOV=46;   // right-click to zoom / aim down sights
 const lookDelta={x:0,y:0};
 const moveStick={x:0,y:0};
 
@@ -862,11 +863,12 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyR')reload(); if(e.code==='KeyG')throwGrenade(); if(e.code==='KeyV')melee();
   if(e.code==='KeyF' && profile && profile.owner && gameState==='playing'){ e.preventDefault(); selectWeapon(weapons.findIndex(w=>w.id==='ownergod')); } });
 addEventListener('keyup',e=> keys[e.code]=false);
-addEventListener('mousedown',e=>{ if(e.button===0) startFire(); });
-addEventListener('mouseup',  e=>{ if(e.button===0) releaseFire(); });
+addEventListener('mousedown',e=>{ if(e.button===0) startFire(); else if(e.button===2 && gameState==='playing'){ aiming=true; } });
+addEventListener('mouseup',  e=>{ if(e.button===0) releaseFire(); else if(e.button===2){ aiming=false; } });
 addEventListener('wheel',e=>{ if(gameState!=='playing')return; cycleWeapon(e.deltaY>0?1:-1); });
-addEventListener('mousemove',e=>{ if(!locked)return;
-  player.yaw-=e.movementX*sens; player.pitch-=e.movementY*sens;
+renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());   // don't pop the menu when aiming
+addEventListener('mousemove',e=>{ if(!locked)return; const s=aiming?sens*0.5:sens;   // slower aim for precision when zoomed
+  player.yaw-=e.movementX*s; player.pitch-=e.movementY*s;
   const lim=Math.PI/2-0.05; player.pitch=Math.max(-lim,Math.min(lim,player.pitch)); });
 document.addEventListener('pointerlockchange',()=> locked=(document.pointerLockElement===renderer.domElement));
 addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
@@ -1612,6 +1614,7 @@ function updatePlayer(dt){
 
 // ---------- Game flow ----------
 function resetGame(){
+  aiming=false; camera.fov=BASE_FOV; camera.updateProjectionMatrix();
   [...enemies].forEach(removeEnemy);
   effects.splice(0).forEach(f=>scene.remove(f.mesh));
   projectiles.splice(0).forEach(p=>mapGroup.remove(p.mesh));
@@ -1751,6 +1754,9 @@ function detectCheat(){
 // ---------- Loop ----------
 const clock=new THREE.Clock();
 function frame(dt){
+  // smooth zoom (right-click ADS) — always runs so it eases back out when you let go / leave
+  const wantFov=(aiming && gameState==='playing' && player.alive) ? AIM_FOV : BASE_FOV;
+  if(Math.abs(camera.fov-wantFov)>0.05){ camera.fov += (wantFov-camera.fov)*Math.min(1,dt*16); camera.updateProjectionMatrix(); }
   if(gameState==='playing'&&player.alive){
     if(detectCheat()) return;
     updateMovers(dt); updatePlayer(dt);

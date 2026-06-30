@@ -283,6 +283,9 @@
   #scoreboard h4{font-size:11px;letter-spacing:2px;color:var(--warn);margin-bottom:6px;text-transform:uppercase;}
   .sbrow{display:flex;justify-content:space-between;font-size:13px;padding:2px 0;gap:12px;}
   .sbrow .k{color:var(--good);font-weight:bold;}
+  .sbrow .sbn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sbrep{pointer-events:auto;cursor:pointer;background:none;border:none;font-size:13px;line-height:1;padding:0 2px;opacity:.85;}
+  .sbrep:hover{opacity:1;} .sbrep:disabled{opacity:.5;cursor:default;}
   @media(max-width:520px){ .title{font-size:44px;} }
 </style>
 </head>
@@ -1795,6 +1798,8 @@ let gameMode='solo', chatOpen=false, stateAcc=0;
 const DEFAULT_WS_URL='';                 // paste your server URL here to pre-fill the lobby
 const remotes={}, mpNames={}, mpScores={};
 const MP_KILL_TARGET=50;   // first player to this many kills wins the match
+const reportsAgainst={};   // targetId -> { reporterId:true } ; enough reports kicks a player
+const myReports={};        // players YOU have reported (report once each)
 const PLAYER_COLORS=[0x4dd2ff,0xff2e63,0xffd23f,0x6dff8c,0xb06dff,0xff9f1c,0x00e5ff,0xff7eb6];
 // STUN finds your public address; TURN relays traffic when two players' routers block a direct link
 // (most cross-network failures). Multiple providers + TCP/443 endpoints to get through strict firewalls.
@@ -1954,6 +1959,7 @@ const NET={
       case 'death': onMpDeath(o.id,o.by); break;
       case 'forfeit': onForfeit(o.id); break;
       case 'cheat': onCheat(o.id); break;
+      case 'report': if(o.target) tallyReport(o.id,o.target); break;
       case 'win': onWin(o.id,o.name); break;
       case 'boom': if(o.at) explodeFX(new THREE.Vector3(o.at[0],o.at[1],o.at[2]), o.r||8); break;
       case 'start': if(typeof o.map==='number') selectedMap=o.map; if(gameState!=='playing') startArena(); break;
@@ -2000,9 +2006,38 @@ function onMpDeath(id,by){ if(by){ mpScores[by]=(mpScores[by]||0)+1; }
     if(kills>=MP_KILL_TARGET){ declareWin(); } }
   renderScoreboard(); }
 function renderScoreboard(){ const el=$('#sbrows'); if(!el)return;
-  const rows=[{id:NET.id,name:NET.name+' (you)'}].concat(Object.keys(remotes).map(id=>({id,name:mpNames[id]||'Player'})));
+  const rows=[{id:NET.id,name:NET.name+' (you)',you:true}].concat(Object.keys(remotes).map(id=>({id,name:mpNames[id]||'Player'})));
   rows.sort((a,b)=>(mpScores[b.id]||0)-(mpScores[a.id]||0));
-  el.innerHTML=rows.map(r=>'<div class="sbrow"><span>'+esc(r.name)+'</span><span class="k">'+(mpScores[r.id]||0)+'</span></div>').join(''); }
+  el.innerHTML=rows.map(r=>{
+    const rep = r.you ? '' : '<button class="sbrep" title="Report player" data-report="'+r.id+'"'+(myReports[r.id]?' disabled':'')+'>'+(myReports[r.id]?'✓':'🚩')+'</button>';
+    return '<div class="sbrow"><span class="sbn">'+esc(r.name)+'</span><span class="k">'+(mpScores[r.id]||0)+'</span>'+rep+'</div>';
+  }).join(''); }
+// ---- Player reporting (vote-kick): enough rivals report someone -> they're removed ----
+function reportPlayer(id){
+  if(!id || id===NET.id || !remotes[id] || myReports[id]) return;
+  myReports[id]=true; NET.send({t:'report',target:id}); tallyReport(NET.id,id);
+  pushMpChat(null,'🚩 You reported '+(mpNames[id]||'a player')); renderScoreboard();
+}
+function tallyReport(reporterId,targetId){
+  if(!targetId || reporterId===targetId) return;
+  (reportsAgainst[targetId]=reportsAgainst[targetId]||{})[reporterId]=true;
+  const count=Object.keys(reportsAgainst[targetId]).length;
+  const potentialReporters=Object.keys(remotes).length;   // everyone except the target (you + remotes, minus target)
+  const threshold=Math.max(2, Math.ceil(potentialReporters/2));
+  if(count>=threshold) kickReported(targetId,count);
+}
+function kickReported(targetId,count){
+  if(targetId===NET.id){ pushMpChat(null,'🚫 You were removed for too many reports'); kickedOut(); return; }
+  const nm=mpNames[targetId]||'A player';
+  if(remotes[targetId]) removeRemote(targetId);
+  pushMpChat(null,'🚫 '+nm+' was removed ('+count+' reports)'); addChat(null,nm+' was removed for reports',true);
+  delete reportsAgainst[targetId]; renderScoreboard();
+}
+function kickedOut(){ document.exitPointerLock&&document.exitPointerLock(); showLeaveBtn(false); firing=false; $('#victory').classList.remove('on');
+  leaveMp(); gameState='menu';
+  $('#lobbyScreen').classList.remove('hidden'); $('#startScreen').classList.add('hidden'); $('#overScreen').classList.add('hidden');
+  if(typeof setNetStatus==='function') setNetStatus('You were removed from the match (too many reports).','err');
+  if(typeof updateRotateHint==='function') updateRotateHint(); }
 // chat
 function addChat(name,text,sys){ const log=$('#chatLog'); if(!log)return; const d=document.createElement('div');
   d.className='cm'+(sys?' sys':''); d.innerHTML=sys?esc(text):('<b>'+esc(name)+':</b> '+esc(text)); log.appendChild(d);
@@ -2022,6 +2057,7 @@ function startArena(){ if(isBanned()){ $('#bannedScreen').classList.remove('hidd
   document.getElementById('mapname').textContent=MAPS[selectedMap].name+' · MULTIPLAYER';
   for(const id in remotes){ const g=remotes[id].group; if(g.parent!==scene) scene.add(g); if(!shootTargets.includes(g)) shootTargets.push(g); }
   for(const k in mpScores) delete mpScores[k]; mpScores[NET.id]=0;                 // fresh scores each match
+  for(const k in reportsAgainst) delete reportsAgainst[k]; for(const k in myReports) delete myReports[k];   // fresh reports each match
   document.getElementById('kills').textContent='0 / '+MP_KILL_TARGET;
   $('#scoreboard').classList.add('on'); renderScoreboard(); showLeaveBtn(true);
   $('#bChat').style.display='flex'; goFullscreen(); updateRotateHint();
@@ -2073,6 +2109,7 @@ function returnToLobbyAfterMatch(){
   else { resetLobbyCards(); }
   updateRotateHint&&updateRotateHint(); }
 $('#leaveBtn').onclick=doLeave;
+$('#sbrows').addEventListener('click',e=>{ const b=e.target.closest('[data-report]'); if(b) reportPlayer(b.getAttribute('data-report')); });
 $('#claimExitBtn').onclick=()=>{ $('#claimScreen').classList.add('hidden'); gameState='menu'; saveProfile(); updateProgUI();
   $('#startScreen').classList.remove('hidden'); $('#overScreen').classList.add('hidden'); sfx('level'); updateRotateHint(); };
 $('#resumeBtn').onclick=()=>{ $('#claimScreen').classList.add('hidden'); gameState='playing'; showLeaveBtn(true); clock.getDelta(); updateRotateHint();
